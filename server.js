@@ -2,9 +2,8 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
-// --- NEW: Google Sheets API ---
+// --- UPDATED: Just get 'google' ---
 const { google } = require('googleapis');
-const credentials = require('/etc/secrets/credentials.json');
 
 // --- 2. Setup Server ---
 const app = express();
@@ -27,17 +26,23 @@ let allQuestions = {
 	3: []
 };
 
-// --- *** Google Sheets Integration *** ---
+// --- *** UPDATED: Google Sheets Integration *** ---
 
+// Config for the Google Sheets API
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
-// *** PUT YOUR SPREADSHEET ID HERE ***
-const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_GOES_HERE'; 
+
+// --- UPDATED: Read credentials from Render's Environment Variables ---
+const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
+const GOOGLE_CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL;
+// This line fixes the line breaks in the private key
+const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
 
 async function getAuthClient() {
+	// --- UPDATED: Build auth from variables ---
 	const auth = new google.auth.JWT(
-		credentials.client_email,
+		GOOGLE_CLIENT_EMAIL,
 		null,
-		credentials.private_key,
+		GOOGLE_PRIVATE_KEY,
 		SCOPES
 	);
 	await auth.authorize();
@@ -45,25 +50,21 @@ async function getAuthClient() {
 }
 
 /**
- * --- *** UPDATED PARSER *** ---
- * This is now more robust and correctly handles your "[...]|||" format.
+ * Parses your "[mcq|...]" string format
  */
 function parseQuestionString(str) {
 	try {
-		// 1. Find the first '[' and first ']'
 		const startIndex = str.indexOf('[');
 		const endIndex = str.indexOf(']');
 		
 		if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
-			return null; // Brackets not found or in wrong order
+			return null; 
 		}
 
-		// 2. Extract the content *between* the brackets
 		const content = str.substring(startIndex + 1, endIndex);
 		
-		// 3. Split by |
 		const parts = content.split('|');
-		if (parts.length < 4) return null; // [type|question|answer1*|feedback]
+		if (parts.length < 4) return null; 
 
 		const type = parts[0];
 		const questionText = parts[1];
@@ -106,6 +107,13 @@ function parseQuestionString(str) {
  */
 async function loadQuestionsFromSheet(auth) {
 	const sheets = google.sheets({ version: 'v4', auth });
+	
+	// --- CHECK: Make sure SPREADSHEET_ID is loaded ---
+	if (!SPREADSHEET_ID) {
+		console.error("SPREADSHEET_ID is not set in Environment Variables.");
+		return;
+	}
+	
 	const res = await sheets.spreadsheets.values.get({
 		spreadsheetId: SPREADSHEET_ID,
 		range: 'Questions!A2:B', 
@@ -416,6 +424,11 @@ io.on('connection', (socket) => {
 // --- 6. Start the Server ---
 async function startServer() {
 	try {
+		// --- CHECK: Make sure variables are loaded ---
+		if (!GOOGLE_CLIENT_EMAIL || !GOOGLE_PRIVATE_KEY || !SPREADSHEET_ID) {
+			throw new Error("Missing Google credentials in Environment Variables.");
+		}
+		
 		const auth = await getAuthClient();
 		await loadQuestionsFromSheet(auth);
 		
@@ -423,7 +436,7 @@ async function startServer() {
 			console.log(`Server running on http://localhost:${PORT}`);
 		});
 	} catch (e) {
-		console.error("Failed to authenticate with Google Sheets:", e);
+		console.error("Failed to authenticate with Google Sheets:", e.message);
 		process.exit(1);
 	}
 }
