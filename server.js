@@ -449,7 +449,7 @@ async function startServer() {
 		if (!SPREADSHEET_ID) {
 			console.warn("WARNING: SPREADSHEET_ID is not set in Environment Variables. Using hardcoded ID.");
 			// --- FALLBACK: Add your hardcoded ID here if you want ---
-			// SPREADSHEET_ID = "1dxLNnJNRJQ5ZBkuySjHFP7zB_epOrD5He5YUt-AdUtA"; 
+			SPREADSHEET_ID = "1dxLNnJNRJQ5ZBkuySjHFP7zB_epOrD5He5YUt-AdUtA"; 
 			if (!SPREADSHEET_ID) { // If it's *still* not set
 				throw new Error("SPREADSHEET_ID is not set in Environment Variables and no fallback is provided.");
 			}
