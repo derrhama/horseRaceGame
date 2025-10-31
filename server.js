@@ -2,8 +2,9 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
-// --- UPDATED: Just get 'google' ---
 const { google } = require('googleapis');
+// --- NEW: Import File System ---
+const fs = require('fs');
 
 // --- 2. Setup Server ---
 const app = express();
@@ -31,18 +32,36 @@ let allQuestions = {
 // Config for the Google Sheets API
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
 
-// --- UPDATED: Read credentials from Render's Environment Variables ---
-const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
-const GOOGLE_CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL;
-// This line fixes the line breaks in the private key
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+// --- NEW: Read credentials from Render's Secret File ---
+let credentials;
+let SPREADSHEET_ID;
+try {
+	// Render mounts secret files at this path
+	const credentialsPath = '/etc/secrets/credentials.json';
+	const credentialsFile = fs.readFileSync(credentialsPath);
+	credentials = JSON.parse(credentialsFile);
+	
+	// *** NEW: Get Spreadsheet ID from credentials.json ***
+	// (This is a good practice!)
+	// Add a property to your credentials.json file:
+	// "spreadsheet_id": "YOUR_ID_HERE"
+	// OR just set it as an Environment Variable in Render:
+	SPREADSHEET_ID = process.env.SPREADSHEET_ID;
+	
+	// If you don't want to use an env var, you can hard-code it *here*
+	// SPREADSHEET_ID = "1dxLNnJNRJQ5ZBkuySjHFP7zB_epOrD5He5YUt-AdUtA";
+
+} catch (e) {
+	console.error("Could not load credentials.json:", e.message);
+	process.exit(1);
+}
 
 async function getAuthClient() {
-	// --- UPDATED: Build auth from variables ---
+	// --- UPDATED: Build auth from parsed file ---
 	const auth = new google.auth.JWT(
-		GOOGLE_CLIENT_EMAIL,
+		credentials.client_email,
 		null,
-		GOOGLE_PRIVATE_KEY,
+		credentials.private_key,
 		SCOPES
 	);
 	await auth.authorize();
@@ -108,9 +127,8 @@ function parseQuestionString(str) {
 async function loadQuestionsFromSheet(auth) {
 	const sheets = google.sheets({ version: 'v4', auth });
 	
-	// --- CHECK: Make sure SPREADSHEET_ID is loaded ---
 	if (!SPREADSHEET_ID) {
-		console.error("SPREADSHEET_ID is not set in Environment Variables.");
+		console.error("SPREADSHEET_ID is not set.");
 		return;
 	}
 	
@@ -424,9 +442,17 @@ io.on('connection', (socket) => {
 // --- 6. Start the Server ---
 async function startServer() {
 	try {
-		// --- CHECK: Make sure variables are loaded ---
-		if (!GOOGLE_CLIENT_EMAIL || !GOOGLE_PRIVATE_KEY || !SPREADSHEET_ID) {
-			throw new Error("Missing Google credentials in Environment Variables.");
+		// --- CHECK: Make sure credentials are loaded ---
+		if (!credentials || !credentials.client_email || !credentials.private_key) {
+			throw new Error("credentials.json file is missing or malformed.");
+		}
+		if (!SPREADSHEET_ID) {
+			console.warn("WARNING: SPREADSHEET_ID is not set in Environment Variables. Using hardcoded ID.");
+			// --- FALLBACK: Add your hardcoded ID here if you want ---
+			// SPREADSHEET_ID = "1dxLNnJNRJQ5ZBkuySjHFP7zB_epOrD5He5YUt-AdUtA"; 
+			if (!SPREADSHEET_ID) { // If it's *still* not set
+				throw new Error("SPREADSHEET_ID is not set in Environment Variables and no fallback is provided.");
+			}
 		}
 		
 		const auth = await getAuthClient();
@@ -436,7 +462,7 @@ async function startServer() {
 			console.log(`Server running on http://localhost:${PORT}`);
 		});
 	} catch (e) {
-		console.error("Failed to authenticate with Google Sheets:", e.message);
+		console.error("Failed to start server:", e.message);
 		process.exit(1);
 	}
 }
