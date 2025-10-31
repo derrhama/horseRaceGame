@@ -4,7 +4,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 // --- NEW: Google Sheets API ---
 const { google } = require('googleapis');
-const credentials = require('./credentials.json');
+const credentials = require('/etc/secrets/credentials.json');
 
 // --- 2. Setup Server ---
 const app = express();
