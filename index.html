@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trivia Horse Race Game (Real-Time)</title>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <style>
+	body {
+	margin: 0 auto;
+	background: #232323;
+	font-family: sans-serif;
+}
+.racer-wrapper {
+	transition-duration: 500ms;
+	-moz-transition-duration: 500ms;
+	-webkit-transition-duration: 500ms;
+	transition-property: transform;
+	-moz-transition-property: transform;
+	-webkit-transition-property: transform;
+	transition-timing-function: linear;
+	-moz-transition-timing-function: linear;
+	-webkit-transition-timing-function: linear;
+}
+.restart {
+	padding: 20px;
+	cursor: pointer;
+	font-family: 'Roboto', sans-serif;
+	font-weight: 700;
+	position: fixed;
+	bottom: 20px;
+	right: 20px;
+	border-radius: 100px;
+	height: 80px;
+	width: 80px;
+	transition: 200ms;
+	font-size: 2em;
+	border: none;
+	box-shadow: 0px 4px 4px #000;
+	display: none;
+}
+.restart:hover {
+	height: 90px;
+	width: 90px;
+	bottom: 15px;
+	right: 15px;
+}
+.goldMedal, .silverMedal, .bronzeMedal {
+	transition: transform 500ms;
+}
+
+#test-controls {
+	display: none; /* Obsolete */
+}
+
+/* --- STYLES FOR THE MAIN GAME UI --- */
+#game-ui {
+	width: 90%;
+	max-width: 800px; 
+	margin: 20px auto;
+	background: #333;
+	color: white;
+	padding: 15px;
+	border-radius: 8px;
+	box-shadow: 0px 4px 8px rgba(0,0,0,0.5);
+	text-align: center;
+}
+#game-ui h3 {
+	margin-top: 0;
+}
+#game-ui button {
+	padding: 10px 15px;
+	font-size: 1em;
+	cursor: pointer;
+	border-radius: 5px;
+	border: none;
+	margin: 5px;
+}
+#game-ui button:disabled {
+	background-color: #555;
+	cursor: not-allowed;
+}
+#game-ui input {
+	padding: 10px;
+	border-radius: 5px;
+	border: none;
+	margin: 5px;
+}
+#admin-pass {
+	width: 150px;
+}
+#player-join-fields {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 5px;
+	margin-bottom: 10px;
+}
+/* UPDATED: Make color picker more obvious */
+#player-join-fields label {
+	font-size: 0.9em;
+	color: #ccc;
+}
+#player-color {
+	height: 40px; 
+	width: 50px;  
+	border: 2px solid #555;
+	padding: 2px;
+	background-color: #333; 
+	cursor: pointer;
+	padding: 2px; 
+}
+#player-color::-webkit-color-swatch {
+	border: 1px solid #fff;
+	border-radius: 3px;
+}
+#player-color::-moz-color-swatch {
+	border: 1px solid #fff;
+	border-radius: 3px;
+}
+/* END UPDATED */
+
+#host-login-fields {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 5px;
+	border-top: 1px solid #555;
+	padding-top: 10px;
+	margin-top: 10px;
+}
+#question-area {
+	background: #444;
+	padding: 10px;
+	border-radius: 5px;
+	margin-top: 15px;
+}
+#question-area p {
+	font-size: 1.2em;
+	margin-top: 0;
+}
+#question-area h3 {
+	color: #4CAF50;
+	margin-top: 0;
+	margin-bottom: 10px;
+	font-size: 1.2em;
+}
+/* NEW: Style for player's horse name */
+#my-horse-name {
+	color: #4CAF50;
+	font-size: 1.4em;
+	margin: 10px 0;
+	min-height: 1.4em;
+}
+#status-area {
+	margin-top: 10px;
+	font-size: 1.1em;
+	color: yellow;
+	font-weight: bold;
+	min-height: 1.2em;
+}
+#timer {
+	color: #FF6347; 
+	font-size: 1.2em;
+}
+.safe-period {
+	color: #32CD32; 
+}
+#start-race-btn {
+	background-color: #4CAF50; 
+	color: white;
+	font-weight: bold;
+	padding: 12px 20px;
+	border: none;
+	border-radius: 5px;
+	cursor: pointer;
+	font-size: 1.1em;
+}
+#start-race-btn:hover {
+	background-color: #45a049;
+}
+  </style>
+</head>
+<body>
+	<svg id="racecourse" viewBox="-10 -10 800 140"> <defs>
+			<filter id="mud">
+				<feTurbulence baseFrequency="0.85" numOctaves="10" seed="113" />
+				<feColorMatrix values="2.4 -0.6 -2.8 -1.7 -0.3 -3.1 -1.8 -1.8 -4.1 2.7 0.8 -3.1 2.9 -0.8 3.7 -2.2 4.2 -0.5 3.1 -1.3" />
+				<feDiffuseLighting lighting-color="rgb(102,74,52)" surfaceScale="1">
+					<feDistantLight azimuth="270" elevation="90" />
+				</feDiffuseLighting>
+			</filter>
+			<filter id="blur" x="-100%" y="-100%" width="300%" height="300%">
+				<feGaussianBlur in="SourceGraphic" stdDeviation="2" />
+			</filter>
+			<radialGradient id="grad">
+				 <stop offset="50%" stop-color="forestgreen" />
+				 <stop offset="100%" stop-color="green" />
+			</radialGradient>
+			<path id="horse" d="M 10 0 c 1.7 0.1 4.6 -1 5.5 -1.6 c -0.7 -0.2 -1.1 -0.2 -1 -0.3 c 1.2 -0.1 1.4 -0.1 1.5 -0.1 c 0 0 0.2 0 0.2 -0.1 c 0 0 -0.2 0 -0.2 0 c -0.2 -0.1 -0.5 -0.2 -0.6 -0.2 c 0 0 -0.2 0 -0.2 0 c 0 -0.1 0.2 -0.1 0.2 -0.1 c 0.3 0 0.5 -0.1 0.8 -0.1 c 0.1 0 0.4 0 0.4 0 c 0 -0.1 -0.3 -0.1 -0.5 -0.2 c -0.1 -0.1 0.6 -0.2 0.8 -0.1 c 0 0 0.3 0.1 0.3 0 c 0 -0.1 -0.7 -0.3 -0.7 -0.4 c 0.2 -0.1 0.5 0 0.9 0.1 c 0.2 0 0.7 0.2 0.7 0.1 c 0.1 -0.2 -0.5 -0.3 -0.4 -0.4 c 0 -0.2 0.5 -0.1 0.8 0 c 0.4 0.1 0.6 0 0.5 -0.1 c -0.5 -0.3 0 -0.2 0.1 -0.2 c 0.3 0 0.6 0.1 0.8 0.2 c 0.2 0.1 -0.1 -0.3 0 -0.4 c 0 -0.1 0.5 0.1 0.7 0.2 c 0.1 0 0.2 0 0.3 -0.1 c 0.1 -0.1 0.2 -0.3 0.2 -0.4 c 0 -0.1 0.2 -0.2 0.3 -0.4 c 0.1 -0.1 0.1 -0.4 0.2 -0.4 c 0.1 0 0.4 0.4 0.4 0.5 c 0.1 0.2 0.2 0.5 0.3 0.7 c 0.1 0.1 0 0.4 0 0.5 c 0 0 0 0 0 0 c 0.2 0.2 0.3 0.5 0.5 0.6 c 0.3 0.4 1.1 1.8 1.3 2.1 c 0.2 0.3 0.8 1 0.8 1.1 c 0 0.2 0.1 0.4 0.2 0.5 c 0.2 0.2 0.1 0.5 0 0.7 c -0.1 0.2 -0.4 0.3 -0.5 0.3 c -0.1 0.1 -0.4 0.2 -0.5 0.1 c -0.2 0 -0.2 -0.2 -0.5 -0.5 c -0.4 -0.3 -0.7 -0.8 -1 -1.1 c -0.4 -0.1 -0.8 -0.3 -1.1 -0.3 c -0.2 -0.1 -0.6 -0.2 -0.8 -0.4 c -0.3 0.4 -2.5 2.3 -2.8 2.5 c -0.1 1.1 -0.1 2.1 -0.2 2.4 c -0.2 0.3 -0.3 0.6 -0.1 0.9 c 0.6 1.1 1.5 2.6 1.6 2.8 c 0.2 0.3 0.3 0.2 0.5 0.5 c 0.1 0.3 0.8 1.7 1.4 2.2 c 0.5 0.4 1.1 1.2 1.4 1.4 c 0.2 0.3 0.7 0.5 0.9 0.7 c 0.1 0.3 0.5 0.8 0.5 0.9 c -0.1 0.1 -1.4 0 -1.4 -0.2 c -0.1 -0.3 -0.2 -0.5 -0.1 -0.7 c -0.2 -0.1 -0.5 -0.5 -0.9 -0.5 c -0.3 -0.1 -1.5 -2.1 -1.7 -2.4 c -0.3 -0.3 -0.4 -0.1 -0.7 -0.5 c -0.4 -0.4 -0.5 -0.8 -1 -1.1 c -0.4 -0.2 -1.3 -1.5 -1.9 -2.2 c -0.5 0.1 -0.8 0.2 -1.3 0.2 c 0 0 0 0 0 0 c 0 0 0 0 0 0 c -0.1 0 -0.1 0 -0.1 0 c -0.6 0.1 -1.5 0.8 -1.8 1.2 c -0.4 0.4 -1 0.8 -1.4 1.4 c -0.3 0.4 -0.7 1.1 -1.2 1.7 c -0.3 0.4 -0.6 0.7 -0.6 0.8 c 0.1 0.3 -0.5 0.9 -0.6 1 c -0.1 0.2 0 0.4 0.1 0.6 c 0.2 0.3 0 1 -0.1 1.1 c -0.1 0.2 -1.3 -0.7 -1.1 -1 c 0.1 -0.2 0.5 -0.5 0.5 -0.6 c 0 -0.2 0.2 -0.6 0.3 -0.9 c 0.2 -0.2 1.1 -1.3 1.2 -1.5 c 0.1 -0.3 0.5 -1.4 0.6 -1.6 c 0.1 -0.4 0.6 -0.8 0.9 -1.3 c 0.1 -0.1 0.2 -0.3 0.3 -0.5 c -1.1 -0.2 -2.3 -0.6 -3.1 -0.9 c -1 -0.3 -3.4 -1.4 -4 -1.4 c -0.9 0.1 -1.4 0.4 -2.2 0.6 c -1 0.4 -1.6 1.2 -1.9 1.3 c -0.5 0.1 -1.2 1.5 -1.4 1.8 c -0.4 0.3 -1.4 1.2 -1.5 1.4 c -0.1 0.2 -0.2 0.3 -0.4 0.4 c -0.4 0.2 -1.3 1.3 -1.4 1.7 c -0.1 0.5 -0.3 0.7 -0.5 0.8 c -0.3 0.2 -0.5 0.1 -0.7 0.5 c -0.1 0.3 -0.5 1.2 -1.1 1.4 c -0.5 0.1 -0.4 -0.3 -0.4 -0.6 c 0 -0.4 0.2 -1 0.5 -1 c 0.3 -0.1 0.5 0 0.6 -0.2 c 0.2 -0.2 0.1 -0.4 0.3 -0.6 c 0.2 -0.2 0.8 -0.5 0.9 -0.9 c 0.2 -0.4 0.8 -1.4 0.8 -1.8 c 0.1 -0.4 0.9 -1.2 1.2 -1.6 c -0.7 0.5 -2.4 1.5 -2.7 1.7 c -0.3 0.3 -0.7 1.1 -0.9 1.2 c -0.3 0.2 -0.7 0.4 -1 0.5 c -0.3 0.1 -0.6 0.2 -1 0.4 c -0.5 0.1 -0.7 0.1 -0.8 0.1 c -0.2 -0.1 -0.1 -1.1 0.5 -1.4 c 0.5 0 0.7 0.2 1 0.1 c 0.3 -0.1 0.2 -0.4 0.4 -0.5 c 0.2 -0.1 0.8 -0.2 0.9 -0.4 c 0.2 -0.2 1.4 -1.4 1.6 -1.7 c 0.3 -0.4 0.7 -1.2 0.9 -1.4 c 0.3 -0.2 0.9 -0.3 1.3 -0.5 c 0.4 -0.2 0.9 -0.6 1.2 -1.1 c -0.2 -0.9 0 -2.2 -0.1 -2.8 c 0 -0.5 0.2 -1 0.4 -1.4 c 0 -0.1 0 -0.1 -0.1 -0.1 c -0.4 -0.1 -0.9 0.4 -1.2 0.5 c -1.1 0.3 -0.9 0.2 -0.6 0 c -1.3 0.2 -1.8 0.6 -1.8 0.6 c 0.1 -0.1 0.2 -0.2 0.3 -0.3 c -0.2 0 -0.6 0.4 -0.9 0.5 c -0.6 0.1 -0.8 0.1 -0.9 0.2 c -0.1 0 -0.2 0 -0.2 0 c 0 0 0.2 -0.1 0.2 -0.1 c 0.1 0 0.3 -0.1 0.4 -0.2 c 0.1 -0.1 0.1 -0.1 0.1 -0.1 c -0.1 -0.1 -0.3 0 -0.4 0 c -0.2 0 -0.4 0.2 -0.5 0.2 c -1.1 0.2 -1.6 0.3 -1.6 0.3 c 0.6 -0.3 1 -0.3 1.1 -0.4 c -2 0.1 -2.2 0.2 -2.5 0.3 c 0 -0.1 0.6 -0.4 1.3 -0.5 c -0.2 -0.1 -1.6 -0.1 -1.8 0 c 0.1 -0.1 0.1 -0.1 0.4 -0.2 c 1.6 -0.3 1.8 -0.4 1.9 -0.4 c 0 0 -0.1 0 -0.1 0 l -0.5 0 c -0.4 0 -0.7 -0.2 -1.1 -0.2 c -0.8 0 0.2 -0.1 0.2 -0.1 c 0.1 0 0.1 0 0.3 -0.1 c -0.2 -0.1 -0.7 -0.1 -0.9 0 c -0.2 0.1 -0.3 0.2 -0.4 0.2 c 0.2 -0.3 0.5 -0.4 0.7 -0.4 c 0.5 0 1.3 -0.1 1.7 -0.1 c 0.6 0.1 0.7 0 0.7 0 c 0 0 0.4 -0.1 0.5 -0.1 c 0.5 0 1.2 0.3 1.7 0.2 c 0.3 0 0.5 0 0.7 -0.1 c -0.2 -0.1 -0.3 -0.1 -0.3 -0.2 c 0.1 0 0.5 0.1 0.6 0.1 c 0.8 0 1.1 0 1.4 -0.1 c 2.1 -0.2 2.2 -0.2 2.3 -0.3 c 0.5 -0.3 2.6 -0.7 3.6 -0.8 c 1.1 0 2.7 0.5 3.2 0.5 c 0.5 0 1.9 0.6 3.1 0.4 z z" fill="tan"/>
+			<path id="jockey" d="M 10 0 c -1.1 -0.4 -1.5 -0.5 -2.3 -1 c -0.9 -0.5 -1.4 -1.3 -1.4 -1.7 c 0 -0.4 0.3 -1 1.3 -1.4 c 3 -1 3.8 -1 4.2 -1 c 2.1 -0.1 1.7 0.1 2.1 -1 c 0.5 -0.6 1.2 -0.7 1.6 -0.5 c 0.5 0.2 1.1 0.8 0.9 1.2 c 0 0.1 -0.1 0.2 -0.1 0.2 c 0 0.1 0.1 0.1 0.1 0.2 c 0.1 0 0.3 0.2 0.1 0.2 c -0.1 0 -0.3 0 -0.4 -0.1 c -0.1 0.1 -0.3 0.3 -0.3 0.5 c -0.1 0.4 -0.4 0.5 -0.5 0.7 c -0.3 0.2 -0.5 0.1 -0.8 -0.1 c -0.3 -0.2 -0.5 -0.1 -0.5 0.5 c 0 0.5 -0.4 0.6 -0.5 1 c -0.1 0.4 -0.2 0.8 0.3 1 c 0.5 0.2 1.7 0.6 1.8 0.3 c 0.1 -0.3 0.9 -0.2 0.8 0.2 c -0.1 0.4 -0.4 0.7 -0.8 0.4 c -0.3 -0.1 -0.8 0.3 -2.3 0.1 c -0.4 -0.1 -0.5 -0.1 -0.7 -0.5 c -0.2 -0.4 -0.1 -0.8 -0.7 -0.8 c -0.2 0 -1.1 0.1 -1.4 0.1 c 0.3 0.4 1.1 0.8 1.2 1.2 c 0.1 0.2 0 0.4 -0.1 0.5 c -0.4 0.4 -1.6 1.5 -1.8 1.8 c 0.4 0.1 0.9 0.1 0.9 0.2 c 0.1 0.2 0.1 0.3 0 0.4 c -0.4 0.4 -2.1 0.1 -2 -0.3 c 0.1 -0.4 0.6 -1.2 1.3 -2.3 z"/>
+		</defs>
+		<rect class="ground" x="-10" y="-10" width="100%" height="2000" fill="rgb(102,74,52)" />
+		<g class="medals" transform="translate(100 0)">
+			<g class="goldMedal" transform="scale(0.2 0.2) translate(1700 -200)">
+				<clipPath id="medalMask">
+					<circle cx="50" cy="50" r="35" />
+				</clipPath>
+				<circle clip-path="url(#medalMask)" cx="50" cy="50" r="35" fill="gold" filter="brightness(90%)" />
+				<path clip-path="url(#medalMask)" d="M -10 90 L 0 100 L 100 0 L 90 -10" fill="#fff">
+					<animate id="shine" attributeName="d" values="M -10 90 L 0 100 L 100 0 L 90 -10; M 50 150 L 60 160 L 160 60 L 150 50" dur="1s" begin="0s;shine.end+5s" fill="freeze" />
+				</path>
+				<path clip-path="url(#medalMask)" d="M 0 0 V 100 L 100 0 Z" fill="gold" filter="brightness(120%)" />
+				<circle cx="50" cy="50" r="30" fill="gold" />
+				<text x="50" y="50" dominant-baseline="middle" text-anchor="middle" fill="gold" filter="brightness(80%)" font-family="Arial, Helvetica, sans-serif" font-size="25">1st</text>
+				<path clip-path="url(#medalMask)" d="M 40 140 L 50 150 L 150 50 L 140 40" fill="#fff">
+					<animate attributeName="d" values="M 40 140 L 50 150 L 150 50 L 140 40; M -60 40 L -50 50 L 50 -50 L 40 -60" dur="1s" begin="0.5s;shine.end+5.5s" fill="freeze" />
+				</path>
+				<text x="50" y="50" dominant-baseline="middle" text-anchor="middle" fill="rgba(255, 230, 15,0.1)" font-family="Arial, Helvetica, sans-serif" font-size="25">1st</text>
+			</g>
+			<g class="silverMedal" transform="scale(0.2 0.2) translate(1700 -200)">
+				<circle clip-path="url(#medalMask)" cx="50" cy="50" r="35" fill="silver" filter="brightness(90%)" />
+				<path clip-path="url(#medalMask)" d="M -10 90 L 0 100 L 100 0 L 90 -10" fill="#fff">
+					<animate id="shine" attributeName="d" values="M -10 90 L 0 100 L 100 0 L 90 -10; M 50 150 L 60 160 L 160 60 L 150 50" dur="1s" begin="0s;shine.end+5s" fill="freeze" />
+				</path>
+				<path clip-path="url(#medalMask)" d="M 0 0 V 100 L 100 0 Z" fill="silver" filter="brightness(120%)" />
+				<circle cx="50" cy="50" r="30" fill="silver" />
+				<text x="50" y="50" dominant-baseline="middle" text-anchor="middle" fill="silver" filter="brightness(80%)" font-family="Arial, Helvetica, sans-serif" font-size="25">2nd</text>
+				<path clip-path="url(#medalMask)" d="M 40 140 L 50 150 L 150 50 L 140 40" fill="#fff">
+					<animate attributeName="d" values="M 40 140 L 50 150 L 150 50 L 140 40; M -60 40 L -50 50 L 50 -50 L 40 -60" dur="1s" begin="0.5s;shine.end+5.5s" fill="freeze" />
+				</path>
+				<text x="50" y="50" dominant-baseline="middle" text-anchor="middle" fill="#000" opacity="0.1" font-family="Arial, Helvetica, sans-serif" font-size="25">2nd</text>
+			</g>
+			<g class="bronzeMedal" transform="scale(0.2 0.2) translate(1700 -200)">
+				<circle clip-path="url(#medalMask)" cx="50" cy="50" r="35" fill="rgb(185, 107, 30)" filter="brightness(90%)" />
+				<path clip-path="url(#medalMask)" d="M -10 90 L 0 100 L 100 0 L 90 -10" fill="#fff">
+					<animate id="shine" attributeName="d" values="M -10 90 L 0 100 L 100 0 L 90 -10; M 50 150 L 60 160 L 160 60 L 150 50" dur="1s" begin="0s;shine.end+5s" fill="freeze" />
+				</path>
+				<path clip-path="url(#medalMask)" d="M 0 0 V 100 L 100 0 Z" fill="rgb(185, 107, 30)" filter="brightness(120%)" />
+				<circle cx="50" cy="50" r="30" fill="rgb(185, 107, 30)" />
+				<text x="50" y="50" dominant-baseline="middle" text-anchor="middle" fill="rgb(185, 107, 30)" filter="brightness(80%)" font-family="Arial, Helvetica, sans-serif" font-size="25">3rd</text>
+				<path clip-path="url(#medalMask)" d="M 40 140 L 50 150 L 150 50 L 140 40" fill="#fff">
+					<animate attributeName="d" values="M 40 140 L 50 150 L 150 50 L 140 40; M -60 40 L -50 50 L 50 -50 L 40 -60" dur="1s" begin="0.5s;shine.end+5.5s" fill="freeze" />
+				</path>
+				<text x="50" y="50" dominant-baseline="middle" text-anchor="middle" fill="#000" opacity="0.1" font-family="Arial, Helvetica, sans-serif" font-size="25">3rd</text>
+			</g>
+		</g>
+		<g class="finishLine">
+			<path d="M700 -10v140" stroke="rgb(72,44,22)" stroke-width="12" />
+			<path d="M700 0v120" stroke="#000" stroke-dasharray="5" stroke-width="10" />
+			<path d="M700 0v120" stroke="#fff" stroke-dasharray="5" stroke-dashoffset="5" stroke-width="10" />
+		</g>
+		<g id="playerArea">
+			</g>
+		<g class="startingBlocks">
+			<g class="startBuilding">
+				</g>
+			<g id="gates">
+				</g>
+		</g>
+	</svg>
+	<div id="game-ui">
+		<div id="join-form">
+			<h3>Join Game</h3>
+			<div id="player-join-fields">
+				<input id="player-name" placeholder="Horse Name (e.g. Bungus)">
+				<label for="player-color">Color:</label>
+				<input id="player-color" type="color" value="#ff0000">
+				<button id="join-btn">Join as Player</button>
+			</div>
+			<div id="host-login-fields">
+				<input id="admin-pass" type="password" placeholder="Admin Password">
+				<button id="host-login-btn">Login as Host</button>
+			</div>
+		</div>
+
+		<div id="player-controls" style="display: none;">
+			<div id="host-controls" style="margin-bottom: 15px; display: none;">
+				<button id="start-race-btn" style="display: none;">🏁 START RACE</button>
+			</div>
+
+			<h3 id="my-horse-name"></h3>
+			
+			<div id="q-controls" style="display: none;">
+				<h3>My Controls</h3>
+				<button class="q-btn" data-difficulty="1">1-Length Q</button>
+				<button class="q-btn" data-difficulty="2">2-Length Q</button>
+				<button class="q-btn" data-difficulty="3">3-Length Q</button>
+			</div>
+			
+			<div id="question-area"></div>
+			<div id="status-area"></div>
+		</div>
+	</div>
+	<button class="restart" onclick="emitResetGame()" title="Reset Game (Host Only)" style="display: none;">🏁</button>
+
+	<script src="/socket.io/socket.io.js"></script>
+	
+	<script>
+		// --- GLOBAL GAME STATE ---
+		let ridersStore = {}; 
+		let numRiders = 0; 
+		let finishOrder = [];
+		let horseProgress = [];
+		let isHost = false; 
+		let myHorseName = ''; 
+		let myHorseLane = -1; // UPDATED: Store player's lane
+		const raceLength = 800; 
+		const stepDistance = 35;
+		const winningDistance = 700; 
+		const svgNS = "http://www.w3.org/2000/svg";
+
+		// --- UTILITY ---
+		const randInt = (min, max) => {
+			return Math.floor(Math.random() * (max - min + 1)) + min;
+		};
+
+		// --- CORE GAME FUNCTIONS ---
+		function declareWinner(laneIndex) {
+			let riderGroup = document.querySelector(`#playerArea g[data-lane="${laneIndex}"]`);
+			if (!riderGroup) return;
+			
+			let hasFinished = finishOrder.some(horse => horse[2] === laneIndex);
+			if (hasFinished) return;
+			
+			let playerName = riderGroup.getAttribute("data-player");
+			let playerColor = riderGroup.getAttribute("data-color");
+			finishOrder.push([playerName, playerColor, laneIndex]);
+			let place = finishOrder.length;
+
+			// --- *** UPDATED: Confetti and Personal Messaging *** ---
+			if (laneIndex === myHorseLane) {
+				const placeSuffix = (place === 1) ? 'st' : (place === 2) ? 'nd' : (place === 3) ? 'rd' : 'th';
+				let message = `🎉 You finished ${place}${placeSuffix}! 🎉`;
+
+				if (place <= 3) {
+					// Launch confetti
+					confetti({
+						particleCount: 150,
+						spread: 100,
+						origin: { y: 0.6 }
+					});
+					if (place === 1) message = `🥇 You finished 1st! 🥇`;
+					if (place === 2) message = `🥈 You finished 2nd! 🥈`;
+					if (place === 3) message = `🥉 You finished 3rd! 🥉`;
+				}
+				
+				// Set personal finish message
+				document.getElementById('status-area').textContent = message;
+			}
+			// --- *** END OF UPDATE *** ---
+
+			document.querySelector('.medals').setAttribute('transform', `translate(${raceLength - 95} 0)`);
+			if (place === 1) {
+				document.querySelector('.goldMedal').setAttribute('transform', `scale(0.2 0.2) translate(0 ${100 * laneIndex - 24})`);
+			} else if (place === 2) {
+				document.querySelector('.silverMedal').setAttribute('transform', `scale(0.2 0.2) translate(0 ${100 * laneIndex - 24})`);
+			} else if (place === 3) {
+				document.querySelector('.bronzeMedal').setAttribute('transform',`scale(0.2 0.2) translate(0 ${100 * laneIndex - 24})`);
+			} else {
+				let finishTextElement = riderGroup.querySelector('.racerFinish');
+				if (finishTextElement) finishTextElement.textContent = place;
+			}
+		}
+
+		function advanceHorse(laneIndex, newPosition) {
+			if (laneIndex === undefined || newPosition === undefined) return;
+			let hasFinished = finishOrder.some(horse => horse[2] === laneIndex);
+			if (hasFinished) return;
+
+			let horseElement = document.querySelector(`#playerArea > g[data-lane-wrapper="${laneIndex}"]`);
+			 if (!horseElement) {
+				console.warn(`Cannot find horse wrapper for lane ${laneIndex} to advance.`);
+				return;
+			}
+			
+			horseProgress[laneIndex] = newPosition; 
+
+			if (newPosition >= winningDistance) {
+				const finalRestingPosition = raceLength - 50;
+				horseProgress[laneIndex] = finalRestingPosition; 
+				horseElement.setAttribute('transform', `translate(${finalRestingPosition} 0)`);
+				declareWinner(laneIndex);
+			} else {
+				horseElement.setAttribute('transform', `translate(${newPosition} 0)`);
+			}
+		}
+
+		function resizeTrack(riderCount) {
+			let course = document.querySelector('#racecourse');
+			let finishLinePaths = document.querySelectorAll('.finishLine > path');
+			let finishLine = raceLength - 100;
+			
+			let trackHeight = Math.max(40, (riderCount * 20) + 20);
+
+			course.setAttribute('viewBox', `-10 -10 ${raceLength} ${trackHeight}`);
+			finishLinePaths[0].setAttribute('d', `M${finishLine} -10v${trackHeight}`);
+			finishLinePaths[1].setAttribute('d', `M${finishLine} -2.5v${trackHeight - 17.5}`);
+			finishLinePaths[2].setAttribute('d', `M${finishLine} -2.5v${trackHeight - 17.5}`);
+		}
+
+		function addHorse(player) {
+			if (!player) return;
+
+			let i = player.lane; 
+			let number = i + 1; 
+			
+			let playerAreaGroup = document.querySelector("#playerArea");
+			let gatesArea = document.querySelector("#gates");
+			
+			const gatePath = document.createElementNS(svgNS, "path");
+			gatePath.setAttribute('d', `M40 ${(i * 20)}v20`);
+			gatePath.setAttribute('stroke', '#fff');
+			gatePath.setAttribute('stroke-width', '1');
+			gatePath.setAttribute('data-gate-lane', i); 
+			gatesArea.appendChild(gatePath);
+
+			let yBase = 7.5 + i * 20;
+			let cyShadow = 22 + i * 20;
+			let yNumPath = 7.1 + i * 20;
+			let yNumText = 11 + i * 20;
+			let brightness = randInt(30, 70);
+			let numWidth = 4 + (number.toString().length);
+
+			const racerWrapper = document.createElementNS(svgNS, 'g');
+			racerWrapper.setAttribute('class', 'racer-wrapper');
+			racerWrapper.setAttribute('transform', 'translate(0 0)');
+			racerWrapper.setAttribute('data-lane-wrapper', i); 
+			
+			const riderGroup = document.createElementNS(svgNS, 'g');
+			riderGroup.setAttribute('stroke', '#111');
+			riderGroup.setAttribute('stroke-width', '0.25');
+			riderGroup.setAttribute('class', 'rider');
+			riderGroup.setAttribute('data-player', player.name);
+			riderGroup.setAttribute('data-color', player.color);
+			riderGroup.setAttribute('data-lane', i); 
+
+			const nameText = document.createElementNS(svgNS, 'text');
+			nameText.setAttribute('class', 'racerName');
+			nameText.setAttribute('stroke', 'none');
+			nameText.setAttribute('fill', '#fff');
+			nameText.setAttribute('font-family', 'monospace');
+			nameText.setAttribute('font-size', '6');
+			nameText.setAttribute('y', String(yBase - 8)); 
+			nameText.setAttribute('x', '15'); 
+			nameText.setAttribute('text-anchor', 'middle'); 
+			nameText.textContent = player.name;
+			riderGroup.appendChild(nameText);
+
+			const finishText = document.createElementNS(svgNS, 'text');
+			finishText.setAttribute('class', 'racerFinish');
+			finishText.setAttribute('fill', '#ccc');
+			finishText.setAttribute('stroke', '#fff');
+			finishText.setAttribute('font-family', 'monospace');
+			finishText.setAttribute('font-size', '7');
+			finishText.setAttribute('y', String(yBase));
+			finishText.setAttribute('x', '-85');
+			finishText.setAttribute('text-anchor', 'middle');
+			riderGroup.appendChild(finishText);
+
+			const shadowEllipse = document.createElementNS(svgNS, 'ellipse');
+			shadowEllipse.setAttribute('class', 'shadow');
+			shadowEllipse.setAttribute('filter', 'url(#blur)');
+			shadowEllipse.setAttribute('cx', '8');
+			shadowEllipse.setAttribute('cy', String(cyShadow));
+			shadowEllipse.setAttribute('rx', '17');
+			shadowEllipse.setAttribute('ry', '3');
+			shadowEllipse.setAttribute('fill', 'rgba(0,0,0,0.5)');
+			riderGroup.appendChild(shadowEllipse);
+
+			const gallopGroup = document.createElementNS(svgNS, 'g');
+			gallopGroup.setAttribute('class', 'thingsThatGallop');
+			const horseUse = document.createElementNS(svgNS, 'use');
+			horseUse.setAttribute('href', '#horse');
+			horseUse.setAttribute('transform', `translate(0 ${yBase})`);
+			horseUse.setAttribute('filter', `brightness(${brightness}%)`);
+			gallopGroup.appendChild(horseUse);
+			const numberPath = document.createElementNS(svgNS, 'path');
+			numberPath.setAttribute('class', 'number');
+			numberPath.setAttribute('d', `M 10 ${yNumPath} h ${numWidth} v 5 h -${numWidth}`);
+			numberPath.setAttribute('fill', '#fff');
+			gallopGroup.appendChild(numberPath);
+			const numberText = document.createElementNS(svgNS, 'text');
+			numberText.setAttribute('font-size', '4');
+			numberText.setAttribute('x', '11.5');
+			numberText.setAttribute('y', String(yNumText));
+			numberText.textContent = number;
+			gallopGroup.appendChild(numberText);
+			
+			const gallopAnim = document.createElementNS(svgNS, 'animateTransform');
+			gallopAnim.setAttribute('class', 'playerGallop');
+			gallopAnim.setAttribute('attributeName', 'transform');
+			gallopAnim.setAttribute('attributeType', 'XML');
+			gallopAnim.setAttribute('type', 'rotate');
+			gallopAnim.setAttribute('values', `-12 10 ${yBase}; 12 10 ${yBase}; -12 10 ${yBase}`);
+			gallopAnim.setAttribute('dur', '500ms');
+			gallopAnim.setAttribute('begin', 'indefinite'); 
+			gallopAnim.setAttribute('repeatCount', 'indefinite');
+			gallopGroup.appendChild(gallopAnim);
+			
+			riderGroup.appendChild(gallopGroup); 
+			const jockeyUse = document.createElementNS(svgNS, 'use');
+			jockeyUse.setAttribute('href', '#jockey');
+			jockeyUse.setAttribute('fill', player.color);
+			jockeyUse.setAttribute('transform', `translate(0 ${yBase})`);
+			riderGroup.appendChild(jockeyUse);
+
+			racerWrapper.appendChild(riderGroup);
+			playerAreaGroup.appendChild(racerWrapper);
+		}
+
+		function go() {
+			console.log("--- RESETTING CLIENT ---");
+			ridersStore = {};
+			numRiders = 0;
+			finishOrder = [];
+			horseProgress = [];
+			isHost = false; 
+			myHorseName = ''; 
+			myHorseLane = -1; // UPDATED: Reset lane
+
+			let playerAreaGroup = document.querySelector("#playerArea");
+			let gatesArea = document.querySelector("#gates");
+			while (playerAreaGroup.firstChild) { playerAreaGroup.removeChild(playerAreaGroup.firstChild); }
+			while (gatesArea.firstChild) { gatesArea.removeChild(gatesArea.firstChild); }
+
+			document.querySelector('.goldMedal').setAttribute('transform', `scale(0.2 0.2) translate(1700 -200)`);
+			document.querySelector('.silverMedal').setAttribute('transform', `scale(0.2 0.2) translate(1700 -200)`);
+			document.querySelector('.bronzeMedal').setAttribute('transform',`scale(0.2 0.2) translate(1700 -200)`);
+
+			resizeTrack(0);
+
+			document.getElementById('join-form').style.display = 'block';
+			document.getElementById('player-controls').style.display = 'none';
+			document.getElementById('q-controls').style.display = 'none'; 
+			document.getElementById('question-area').innerHTML = '';
+			document.getElementById('status-area').innerHTML = '';
+			document.getElementById('host-controls').style.display = 'none';
+			document.getElementById('start-race-btn').style.display = 'none';
+			document.querySelector('.restart').style.display = 'none'; 
+			document.getElementById('admin-pass').value = ''; 
+			document.getElementById('my-horse-name').textContent = ''; 
+		}
+
+		// --- INITIALIZE ---
+		go(); // Draw the empty track
+	</script>
+
+	<script>
+		// --- 1. Connect to the Server ---
+		const socket = io();
+
+		// --- 2. Get UI Elements ---
+		const joinBtn = document.getElementById('join-btn');
+		const hostLoginBtn = document.getElementById('host-login-btn');
+		const playerNameInput = document.getElementById('player-name');
+		const playerColorInput = document.getElementById('player-color');
+		const adminPassInput = document.getElementById('admin-pass'); 
+		const questionArea = document.getElementById('question-area');
+		const statusArea = document.getElementById('status-area');
+		const startRaceBtn = document.getElementById('start-race-btn');
+		const hostControls = document.getElementById('host-controls');
+		const qControls = document.getElementById('q-controls');
+		const restartBtn = document.querySelector('.restart');
+		const myHorseNameEl = document.getElementById('my-horse-name'); 
+
+		// --- 3. Timer Management ---
+		let activeTimer = null; 
+		function stopActiveTimer() { /* ... (same as before) ... */ }
+		function startPenaltyTimer(duration, textPrefix) { /* ... (same as before) ... */ }
+		function startDangerZoneTimer(duration) { /* ... (same as before) ... */ }
+		function startRaceCountdown() {
+			stopActiveTimer();
+			let count = 5;
+			statusArea.innerHTML = `Race starting in ${count}...`;
+			activeTimer = setInterval(() => {
+				count--;
+				if (count > 0) {
+					statusArea.innerHTML = `Race starting in ${count}...`;
+				} else {
+					stopActiveTimer();
+				}
+			}, 1000);
+		}
+		
+		// --- 4. Emit (Send) Events to Server ---
+		joinBtn.addEventListener('click', () => {
+			const name = playerNameInput.value;
+			const color = playerColorInput.value;
+			if (name) {
+				socket.emit('joinGame', { name: name, color: color });
+			}
+		});
+
+		hostLoginBtn.addEventListener('click', () => {
+			const adminPass = adminPassInput.value;
+			socket.emit('hostLogin', { adminPass: adminPass });
+		});
+		
+		startRaceBtn.addEventListener('click', () => {
+			socket.emit('startRace');
+			startRaceBtn.style.display = 'none'; 
+		});
+		
+		function emitResetGame() {
+			if (isHost) {
+				socket.emit('resetGame');
+			}
+		}
+
+		// --- Button enable/disable functions ---
+		function disableQButtons() {
+			document.querySelectorAll('.q-btn').forEach(btn => btn.disabled = true);
+		}
+		function enableQButtons() {
+			if (!isHost) {
+				document.querySelectorAll('.q-btn').forEach(btn => btn.disabled = false);
+			}
+		}
+
+		document.querySelectorAll('.q-btn').forEach(btn => {
+			btn.addEventListener('click', () => {
+				stopActiveTimer(); 
+				questionArea.innerHTML = ''; 
+				statusArea.textContent = 'Requesting question...';
+				disableQButtons(); 
+				socket.emit('requestQuestion', { difficulty: btn.getAttribute('data-difficulty') });
+			});
+		});
+
+		function submitAnswer(answer) {
+			stopActiveTimer(); 
+			questionArea.innerHTML = ''; 
+			statusArea.textContent = 'Submitting...';
+			socket.emit('submitAnswer', { answer: answer });
+		}
+		function passQuestion() {
+			stopActiveTimer(); 
+			statusArea.textContent = 'Passing...';
+			disableQButtons(); 
+			socket.emit('passQuestion');
+		}
+
+
+		// --- 5. Listen for Events from Server ---
+		
+		socket.on('syncGame', (data) => {
+			console.log('Syncing with game state.');
+			go(); 
+
+			if (data.isHost) {
+				console.log("I am the host!");
+				isHost = true;
+			} else if (data.allPlayers[data.myId]) {
+				// UPDATED: Store name and lane
+				myHorseName = data.allPlayers[data.myId].name;
+				myHorseLane = data.allPlayers[data.myId].lane;
+				myHorseNameEl.textContent = `Horse: ${myHorseName}`;
+			}
+
+			const players = data.allPlayers;
+			const progress = data.allProgress;
+			const playerList = Object.values(players).sort((a,b) => a.lane - b.lane);
+			
+			playerList.forEach(player => {
+				if (player) {
+					ridersStore[player.lane] = player;
+					numRiders = Math.max(numRiders, player.lane + 1);
+					addHorse(player);
+				}
+			});
+
+			resizeTrack(numRiders);
+
+			progress.forEach((position, lane) => {
+				if (position > 0) {
+					advanceHorse(lane, position);
+				}
+			});
+			
+			document.getElementById('join-form').style.display = 'none';
+			document.getElementById('player-controls').style.display = 'block';
+			
+			if (isHost) {
+				hostControls.style.display = 'block';
+			} else {
+				qControls.style.display = 'block';
+			}
+			
+			handleGameStateChange(data.currentState);
+		});
+
+		socket.on('playerJoined', (player) => {
+			console.log(`Player ${player.name} joined!`);
+			if (!ridersStore[player.lane]) {
+				ridersStore[player.lane] = player;
+				numRiders = Math.max(numRiders, player.lane + 1);
+				addHorse(player);
+				resizeTrack(numRiders); 
+			}
+		});
+
+		socket.on('playerLeft', (data) => {
+			console.log(`Player in lane ${data.lane} (${data.name}) left.`);
+			const horseWrapper = document.querySelector(`#playerArea > g[data-lane-wrapper="${data.lane}"]`);
+			if (horseWrapper) horseWrapper.remove();
+			const gate = document.querySelector(`#gates > path[data-gate-lane="${data.lane}"]`);
+			if (gate) gate.remove();
+			if (ridersStore[data.lane]) {
+				delete ridersStore[data.lane];
+			}
+		});
+
+		// --- Game State Listeners ---
+		socket.on('gameInProgress', () => {
+			alert("Sorry, a race is already in progress. Please wait for the game to reset.");
+			document.getElementById('join-form').style.display = 'none';
+		});
+
+		socket.on('gameReset', () => {
+			console.log("Server has reset the game. Resetting client.");
+			go(); 
+		});
+
+		socket.on('raceStarting', () => {
+			startRaceCountdown();
+		});
+
+		// --- NEW: Listen for winner ---
+		socket.on('winnerAnnounced', (winnerName) => {
+			// Only show this if we are not finished
+			const myFinish = finishOrder.some(horse => horse[2] === myHorseLane);
+			if (!myFinish) {
+				statusArea.textContent = `🏁 ${winnerName} has finished 1st! Keep going! 🏁`;
+			}
+		});
+
+		// --- NEW: Listen for personal finish ---
+		socket.on('youFinished', (data) => {
+			console.log(`I finished in ${data.place} place!`);
+			stopActiveTimer();
+			questionArea.innerHTML = '';
+			qControls.style.display = 'none'; // Hide Q buttons
+		});
+
+		socket.on('gameStateChange', (newState, winnerName) => {
+			handleGameStateChange(newState, winnerName);
+		});
+		
+		function handleGameStateChange(state, winnerName) {
+			console.log(`Game State changed to: ${state}`);
+
+			if (state === 'LOBBY') {
+				statusArea.textContent = 'Waiting for host to start the race...';
+				disableQButtons(); 
+				if (isHost) {
+					startRaceBtn.style.display = 'block';
+					restartBtn.style.display = 'block'; 
+				}
+			} else if (state === 'RACING') {
+				// Only set "Good luck" if a winner hasn't been announced
+				if (finishOrder.length === 0) {
+					statusArea.textContent = 'Race in progress! Good luck!';
+				}
+				
+				document.querySelectorAll('.playerGallop').forEach(anim => {
+					if(anim.beginElement) anim.beginElement();
+				});
+
+				enableQButtons(); 
+			} else if (state === 'FINISHED') {
+				// Get personal finish status
+				const myFinish = finishOrder.some(horse => horse[2] === myHorseLane);
+				
+				// Only show this generic message if you're the host
+				// or if you're a player who somehow didn't get a finish message
+				if (isHost) {
+					statusArea.textContent = `🏁 Race Finished! ${winnerName} was the winner! 🏁`;
+				} else if (!myFinish) {
+					statusArea.textContent = `🏁 The race is over! ${winnerName} won. 🏁`;
+				}
+				
+				disableQButtons(); 
+				stopActiveTimer();
+				questionArea.innerHTML = '';
+				qControls.style.display = 'none'; // Hide controls
+				
+				if (isHost) {
+					restartBtn.style.display = 'block'; 
+				}
+			}
+		}
+		// --- End Game State Listeners ---
+
+		socket.on('horseAdvanced', (data) => {
+			advanceHorse(data.lane, data.newPosition);
+		});
+		
+		socket.on('hereIsYourQuestion', (data) => {
+			startDangerZoneTimer(data.dangerZone);
+			
+			questionArea.innerHTML = `
+				<h3>${myHorseName}</h3>
+				<p>${data.question}</p>
+				<input id="answer-input" placeholder="Your answer" onkeydown="if(event.key==='Enter') submitAnswer(this.value)">
+				<button onclick="submitAnswer(document.getElementById('answer-input').value)">Submit</button>
+				<button id="pass-btn" onclick="passQuestion()">Pass</button>
+			`;
+			document.getElementById('answer-input').focus(); 
+		});
+		
+		socket.on('answerResult', (data) => {
+			stopActiveTimer();
+			questionArea.innerHTML = ''; 
+			enableQButtons(); 
+			if (data.correct) {
+				statusArea.textContent = '✅ Correct! Select a new question.';
+			} else if (data.penalized) {
+				startPenaltyTimer(data.penalty, "❌ Incorrect! Penalized for: ");
+			} else {
+				statusArea.textContent = '❌ Incorrect. (No penalty.) Select a new question.';
+			}
+		});
+		
+		socket.on('penaltyOver', () => {
+			stopActiveTimer(); 
+			enableQButtons(); 
+			statusArea.textContent = 'Your penalty is over. You may choose a question.';
+		});
+		
+		socket.on('passUsed', (data) => {
+			stopActiveTimer();
+			
+			if (data.success) {
+				questionArea.innerHTML = ''; 
+				enableQButtons(); 
+				statusArea.textContent = `Pass used. ${data.passesRemaining} remaining.`;
+			} else {
+				// --- *** BUG FIX *** ---
+				// Don't clear question, just show message and re-enable pass button
+				statusArea.textContent = 'No passes remaining! You must answer.';
+				disableQButtons(); // Keep Q buttons disabled
+				// Re-enable submit/pass
+				document.getElementById('pass-btn').disabled = false;
+				document.getElementById('answer-input').disabled = false;
+			}
+		});
+		
+		// --- Utility functions ---
+		function stopActiveTimer() {
+			if (activeTimer) {
+				clearInterval(activeTimer);
+				activeTimer = null;
+			}
+		}
+		function startPenaltyTimer(duration, textPrefix) {
+			stopActiveTimer(); 
+			disableQButtons(); 
+			const endTime = Date.now() + duration;
+			const timerSpan = '<span id="timer"></span>s';
+			const timerElement = () => document.getElementById('timer'); 
+			activeTimer = setInterval(() => {
+				const remaining = Math.max(0, endTime - Date.now());
+				statusArea.innerHTML = textPrefix + timerSpan;
+				if (timerElement()) {
+					timerElement().textContent = (remaining / 1000).toFixed(1);
+				}
+				if (remaining === 0) stopActiveTimer();
+			}, 100);
+		}
+		function startDangerZoneTimer(duration) {
+			stopActiveTimer();
+			const endTime = Date.now() + duration;
+			const timerSpan = '<span id="timer"></span>s';
+			const timerElement = () => document.getElementById('timer');
+			activeTimer = setInterval(() => {
+				const remaining = Math.max(0, endTime - Date.now());
+				if (remaining === 0) {
+					stopActiveTimer();
+					statusArea.innerHTML = `<span class="safe-period">✅ Penalty-free period.</span>`;
+				} else {
+					statusArea.innerHTML = `Answer incorrectly in the next ${timerSpan} to be penalized.`;
+					if (timerElement()) {
+						timerElement().textContent = (remaining / 1000).toFixed(1);
+					}
+				}
+			}, 100);
+		}
+
+	</script>
+</body>
+</html>
