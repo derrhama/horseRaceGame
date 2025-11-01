@@ -43,9 +43,7 @@ try {
 	process.exit(1);
 }
 
-// --- *** THIS IS THE FIX *** ---
 async function getAuthClient() {
-	// The Google library expects an options object, not arguments.
 	const auth = new google.auth.JWT({
 		email: credentials.client_email,
 		key: credentials.private_key,
@@ -54,10 +52,10 @@ async function getAuthClient() {
 	await auth.authorize();
 	return auth;
 }
-// --- *** END OF FIX *** ---
 
 /**
- * Parses your "[mcq|...]" string format
+ * --- *** UPDATED PARSER *** ---
+ * Now correctly handles MCQ choices and recognizes other types.
  */
 function parseQuestionString(str) {
 	try {
@@ -71,34 +69,55 @@ function parseQuestionString(str) {
 		const content = str.substring(startIndex + 1, endIndex);
 		
 		const parts = content.split('|');
-		if (parts.length < 4) return null; 
+		if (parts.length < 3) return null; // [type|question|feedback] is minimum
 
-		const type = parts[0];
+		const type = parts[0].trim().toLowerCase(); // <-- Robustness fix
 		const questionText = parts[1];
 		const feedback = parts[parts.length - 1];
 		
 		if (type === 'mcq') {
+			if (parts.length < 4) return null; // Must have at least one choice
 			const choices = parts.slice(2, parts.length - 1);
 			let correctAnswer = '';
 			
+			// --- *** THE BUG FIX *** ---
+			// Map the choices to a new array, *removing* the asterisk
 			const processedChoices = choices.map(choice => {
 				if (choice.endsWith('*')) {
 					const cleanChoice = choice.substring(0, choice.length - 1);
-					correctAnswer = cleanChoice;
-					return cleanChoice;
+					correctAnswer = cleanChoice; // Store the clean answer
+					return cleanChoice; // Return the clean choice
 				}
-				return choice;
+				return choice; // Return the normal choice
 			});
+			// --- *** END OF BUG FIX *** ---
 
 			if (correctAnswer) {
 				return {
 					q: questionText,
-					choices: processedChoices,
-					a: correctAnswer,
+					choices: processedChoices, // Send the clean choices
+					a: correctAnswer, // Send the clean answer
 					feedback: feedback,
 					type: type
 				};
 			}
+		} else if (['msq', 'rank', 'sort', 'match', 'text'].includes(type)) {
+			// --- NEW: Handle other types ---
+			// For now, they all expect a text answer.
+			// We assume the answer is the 2nd-to-last part.
+			if (parts.length < 4) return null; // [type|question|answer*|feedback]
+			let answer = parts[parts.length - 2];
+			if (answer.endsWith('*')) {
+				answer = answer.substring(0, answer.length - 1);
+			}
+			
+			return {
+				q: questionText,
+				choices: null, // No choices, will render a text box
+				a: answer,
+				feedback: feedback,
+				type: type
+			};
 		}
 		
 		return null; 
@@ -108,6 +127,7 @@ function parseQuestionString(str) {
 		return null;
 	}
 }
+
 
 /**
  * Fetches and parses all questions from your sheet
@@ -377,6 +397,7 @@ io.on('connection', (socket) => {
 		if (gameState !== 'RACING' || !player || player.state !== 'answering') return;
 		
 		if (player.passes > 0) {
+			// --- SUCCESSFUL PASS ---
 			player.passes--;
 			player.state = 'idle';
 			player.currentQuestion = null; 
@@ -386,6 +407,9 @@ io.on('connection', (socket) => {
 				passesRemaining: player.passes 
 			});
 		} else {
+			// --- *** BUG FIX *** ---
+			// Do NOT change state. Do NOT clear question.
+			// Just tell them they are out of passes.
 			socket.emit('passUsed', { 
 				success: false,
 				passesRemaining: 0
