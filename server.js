@@ -26,7 +26,7 @@ let allQuestions = {
 	3: []
 };
 
-// --- *** UPDATED: Google Sheets Integration *** ---
+// --- *** Google Sheets Integration *** ---
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
 
 // --- Hardcoded Spreadsheet ID ---
@@ -35,15 +35,7 @@ const SPREADSHEET_ID = "1dxLNnJNRJQ5ZBkuySjHFP7zB_epOrD5He5YUt-AdUtA";
 let credentials;
 try {
 	const credentialsPath = '/etc/secrets/credentials.json';
-	const credentialsFile = fs.readFileSync(credentialsPath, 'utf8'); // Read as text
-	
-	// --- *** NEW DIAGNOSTIC LOG *** ---
-	// This will show us *exactly* what Render is reading.
-	console.log("--- Reading credentials.json file ---");
-	console.log(credentialsFile);
-	console.log("--- End of file content ---");
-	// --- *** END DIAGNOSTIC *** ---
-	
+	const credentialsFile = fs.readFileSync(credentialsPath, 'utf8'); 
 	credentials = JSON.parse(credentialsFile);
 	
 } catch (e) {
@@ -51,16 +43,18 @@ try {
 	process.exit(1);
 }
 
+// --- *** THIS IS THE FIX *** ---
 async function getAuthClient() {
-	const auth = new google.auth.JWT(
-		credentials.client_email,
-		null,
-		credentials.private_key,
-		SCOPES
-	);
+	// The Google library expects an options object, not arguments.
+	const auth = new google.auth.JWT({
+		email: credentials.client_email,
+		key: credentials.private_key,
+		scopes: SCOPES
+	});
 	await auth.authorize();
 	return auth;
 }
+// --- *** END OF FIX *** ---
 
 /**
  * Parses your "[mcq|...]" string format
