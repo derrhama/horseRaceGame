@@ -282,6 +282,7 @@
 	min-width: 150px;
 	border: 2px dashed #777;
 	background: #3f3f3f;
+	border-radius: 5px;
 }
 .dnd-bucket-title {
 	font-size: 1.1em;
@@ -433,11 +434,12 @@
 		};
 		// --- NEW: Shuffle Array Function ---
 		function shuffleArray(array) {
-			for (let i = array.length - 1; i > 0; i--) {
+			let newArr = [...array]; // Don't mutate original
+			for (let i = newArr.length - 1; i > 0; i--) {
 				const j = Math.floor(Math.random() * (i + 1));
-				[array[i], array[j]] = [array[j], array[i]];
+				[newArr[i], newArr[j]] = [newArr[j], newArr[i]];
 			}
-			return array;
+			return newArr;
 		}
 
 
@@ -985,7 +987,8 @@
 			switch(data.type) {
 				case 'mcq':
 					questionHTML += '<div id="mcq-choices">';
-					data.choices.forEach(choice => {
+					// Shuffle choices for mcq
+					shuffleArray(data.choices).forEach(choice => {
 						const cleanChoice = choice.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
 						questionHTML += `<button class="mcq-btn" onclick="submitChoice('${cleanChoice}')">${choice}</button>`;
 					});
@@ -994,7 +997,8 @@
 				
 				case 'msq':
 					questionHTML += '<ul id="choice-list">';
-					data.choices.forEach((choice, index) => {
+					// Shuffle choices for msq
+					shuffleArray(data.choices).forEach((choice, index) => {
 						const cleanChoice = choice.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
 						questionHTML += `<li><label><input type="checkbox" name="msq-choice" value="${cleanChoice}"> ${choice}</label></li>`;
 					});
@@ -1005,7 +1009,8 @@
 				case 'rank':
 					questionHTML += '<ul id="rank-list" class="dnd-list">';
 					shuffleArray(data.choices).forEach(choice => {
-						questionHTML += `<li class="dnd-item" data-item="${choice.replace(/'/g, "&apos;")}">${choice}</li>`;
+						const cleanChoice = choice.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+						questionHTML += `<li class="dnd-item" data-item="${cleanChoice}">${choice}</li>`;
 					});
 					questionHTML += '</ul>';
 					questionHTML += `<div class="question-buttons"><button onclick="submitRank()">Submit Answer</button></div>`;
@@ -1034,14 +1039,14 @@
 
 				case 'sort':
 					questionHTML += '<div class="dnd-sort-container">';
-					// Unsorted Items
-					questionHTML += '<div id="sort-items-container"><div class="dnd-bucket-title">Unsorted Items</div>';
+					// Unsorted Items (Source)
+					questionHTML += '<div id="sort-items-container" class="dnd-bucket-wrapper"><div class="dnd-bucket-title">Unsorted Items</div>';
 					questionHTML += '<ul id="sort-items" class="dnd-list dnd-bucket">';
 					shuffleArray(data.choices).forEach(choice => {
 						questionHTML += `<li class="dnd-item" data-item="${choice.replace(/'/g, "&apos;")}">${choice}</li>`;
 					});
 					questionHTML += '</ul></div>';
-					// Buckets
+					// Buckets (Targets)
 					data.buckets.forEach((bucket, index) => {
 						questionHTML += `<div class="dnd-bucket-wrapper"><div class="dnd-bucket-title">${bucket}</div>`;
 						questionHTML += `<ul id="bucket-${index+1}" class="dnd-list dnd-bucket" data-bucket-index="${index+1}"></ul></div>`;
