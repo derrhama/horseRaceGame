@@ -3,8 +3,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const { google } = require('googleapis');
-// We no longer need 'fs'
-// const fs = require('fs');
+const fs = require('fs');
 
 // --- 2. Setup Server ---
 const app = express();
@@ -30,25 +29,33 @@ let allQuestions = {
 // --- *** UPDATED: Google Sheets Integration *** ---
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
 
-// --- UPDATED: Read credentials from Render's Environment Variables ---
-const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
-const GOOGLE_CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL;
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY;
+// --- Hardcoded Spreadsheet ID ---
+const SPREADSHEET_ID = "1dxLNnJNRJQ5ZBkuySjHFP7zB_epOrD5He5YUt-AdUtA";
+
+let credentials;
+try {
+	const credentialsPath = '/etc/secrets/credentials.json';
+	const credentialsFile = fs.readFileSync(credentialsPath, 'utf8'); // Read as text
+	
+	// --- *** NEW DIAGNOSTIC LOG *** ---
+	// This will show us *exactly* what Render is reading.
+	console.log("--- Reading credentials.json file ---");
+	console.log(credentialsFile);
+	console.log("--- End of file content ---");
+	// --- *** END DIAGNOSTIC *** ---
+	
+	credentials = JSON.parse(credentialsFile);
+	
+} catch (e) {
+	console.error("CRITICAL ERROR: Could not read or parse /etc/secrets/credentials.json.", e.message);
+	process.exit(1);
+}
 
 async function getAuthClient() {
-	// --- UPDATED: Check for variables ---
-	if (!GOOGLE_CLIENT_EMAIL) {
-		throw new Error("GOOGLE_CLIENT_EMAIL is not set in Environment Variables.");
-	}
-	if (!GOOGLE_PRIVATE_KEY) {
-		throw new Error("GOOGLE_PRIVATE_KEY is not set in Environment Variables.");
-	}
-
 	const auth = new google.auth.JWT(
-		GOOGLE_CLIENT_EMAIL,
+		credentials.client_email,
 		null,
-		// This line fixes the line breaks in the private key
-		GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+		credentials.private_key,
 		SCOPES
 	);
 	await auth.authorize();
@@ -114,9 +121,8 @@ function parseQuestionString(str) {
 async function loadQuestionsFromSheet(auth) {
 	const sheets = google.sheets({ version: 'v4', auth });
 	
-	// --- UPDATED: Check for SPREADSHEET_ID ---
 	if (!SPREADSHEET_ID) {
-		throw new Error("SPREADSHEET_ID is not set in Environment Variables.");
+		throw new Error("SPREADSHEET_ID is not set.");
 	}
 	
 	const res = await sheets.spreadsheets.values.get({
@@ -429,12 +435,14 @@ io.on('connection', (socket) => {
 // --- 6. Start the Server ---
 async function startServer() {
 	try {
-		// --- UPDATED: More specific checks ---
+		if (!credentials || !credentials.client_email || !credentials.private_key) {
+			throw new Error("Credentials object is missing client_email or private_key.");
+		}
 		if (!SPREADSHEET_ID) {
-			throw new Error("SPREADSHEET_ID is not set in Environment Variables.");
+			throw new Error("SPREADSHEET_ID is not set.");
 		}
 		
-		const auth = await getAuthClient(); // This will throw its own error if keys are missing
+		const auth = await getAuthClient();
 		await loadQuestionsFromSheet(auth);
 		
 		server.listen(PORT, () => {
