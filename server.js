@@ -28,7 +28,10 @@ let allQuestions = {
 
 // --- *** Google Sheets Integration *** ---
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
+
+// --- Hardcoded Spreadsheet ID ---
 const SPREADSHEET_ID = "1dxLNnJNRJQ5ZBkuySjHFP7zB_epOrD5He5YUt-AdUtA";
+
 let credentials;
 try {
 	const credentialsPath = '/etc/secrets/credentials.json';
@@ -50,74 +53,66 @@ async function getAuthClient() {
 }
 
 /**
- * --- *** NEW UNIVERSAL PARSER *** ---
- * Handles mcq, msq, text, rank, sort, and match
+ * --- *** NEW UNIVERSAL PARSER (v3) *** ---
+ * Handles your exact [TYPE:Question|...|ANSWER:Answer|Feedback] syntax
  */
 function parseQuestionString(str) {
 	try {
-		const startIndex = str.indexOf('[');
-		const endIndex = str.indexOf(']');
-		
-		if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
-			return null; 
-		}
+		// 1. Find the [type:...] part
+		const match = str.match(/\[(.*?):(.*?)\]/);
+		if (!match) return null;
 
-		const content = str.substring(startIndex + 1, endIndex);
-		const parts = content.split('|').map(p => p.trim()); // Trim whitespace
-		
-		if (parts.length < 3) return null; // [type|question|feedback] is minimum
+		let type = match[1].trim().toLowerCase();
+		let content = match[2];
 
-		const type = parts[0].toLowerCase();
-		const questionText = parts[1];
-		const feedback = parts[parts.length - 1];
+		// 2. Split the content by the |ANSWER:| and |Feedback]
+		// This is a robust way to separate the main parts
 		
-		// Get all parts between question and feedback
-		const allOptions = parts.slice(2, parts.length - 1);
+		let parts = content.split('|ANSWER:');
+		if (parts.length !== 2) return null; // Must have |ANSWER:
 		
-		let correctAnswers = [];
-		let choices = [];
+		const questionPartsStr = parts[0];
+		const answerPartsStr = parts[1];
 
-		allOptions.forEach(option => {
-			if (option.endsWith('*')) {
-				const cleanAnswer = option.substring(0, option.length - 1);
-				correctAnswers.push(cleanAnswer);
-				// For mcq/msq, add the clean version to choices
-				if (type === 'mcq' || type === 'msq') {
-					choices.push(cleanAnswer);
-				}
-			} else {
-				// If not an answer, it's just a choice (for mcq/msq)
-				if (type === 'mcq' || type === 'msq') {
-					choices.push(option);
-				}
-			}
-		});
+		let answerParts = answerPartsStr.split('|');
+		if (answerParts.length < 2) return null; // Must have Answer|Feedback
+		
+		const answer = answerParts[0].trim();
+		const feedback = answerParts[answerParts.length - 1].trim(); // Feedback is always last
 
-		// Final processing
+		// 3. Get Question and Choices
+		let questionParts = questionPartsStr.split('|');
+		const questionText = questionParts[0].trim();
+		
+		// 'choices' are all the parts between the question and the |ANSWER:
+		let choices = questionParts.slice(1).map(c => c.trim());
+
+		// 4. Finalize based on type
 		if (type === 'mcq') {
-			if (correctAnswers.length !== 1) return null; // MCQ must have exactly one answer
+			if (choices.length === 0) return null; // Must have choices
 			return {
 				q: questionText,
 				choices: choices,
-				a: correctAnswers[0], // Single answer
+				a: answer, 
 				feedback: feedback,
 				type: type
 			};
 		} else if (type === 'msq') {
-			if (correctAnswers.length === 0) return null; // MSQ must have at least one answer
+			if (choices.length === 0) return null; // Must have choices
 			return {
 				q: questionText,
 				choices: choices,
-				a: correctAnswers.sort().join(','), // Comma-separated, sorted
+				a: answer.split(',').map(s => s.trim()).sort().join(','), // Sort answer for easy checking
 				feedback: feedback,
 				type: type
 			};
 		} else if (['text', 'rank', 'sort', 'match'].includes(type)) {
-			if (correctAnswers.length !== 1) return null; // These types must have one answer
+			// For these types, 'choices' are the items to be sorted/matched/ranked
+			// If it's a 'text' question, choices will just be empty.
 			return {
 				q: questionText,
-				choices: null, // Will render as text box
-				a: correctAnswers[0],
+				choices: choices.length > 0 ? choices : null, 
+				a: answer,
 				feedback: feedback,
 				type: type
 			};
@@ -200,7 +195,6 @@ function syncGameForSocket(socket) {
 
 // --- 5. Handle Real-Time Connections ---
 io.on('connection', (socket) => {
-	// ... (rest of the file is identical) ...
 	
 	// --- PLAYER JOIN LOGIC (Player only) ---
 	socket.on('joinGame', (data) => {
@@ -406,6 +400,7 @@ io.on('connection', (socket) => {
 		}
 	});
 	
+	// --- *** UPDATED: PASS BUG FIX *** ---
 	socket.on('passQuestion', (data) => {
 		const player = players[socket.id];
 		if (gameState !== 'RACING' || !player || player.state !== 'answering') return;
@@ -421,7 +416,7 @@ io.on('connection', (socket) => {
 				passesRemaining: player.passes 
 			});
 		} else {
-			// --- *** BUG FIX *** ---
+			// --- FAILED PASS (Bug Fix) ---
 			// Do NOT change state. Do NOT clear question.
 			// Just tell them they are out of passes.
 			socket.emit('passUsed', { 
@@ -463,6 +458,7 @@ io.on('connection', (socket) => {
 		}
 	});
 });
+// --- *** END OF FILE *** ---
 
 // --- 6. Start the Server ---
 async function startServer() {

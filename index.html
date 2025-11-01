@@ -132,30 +132,48 @@
 	padding: 10px;
 	border-radius: 5px;
 	margin-top: 15px;
+	text-align: left; /* UPDATED: Better for lists */
 }
 #question-area p {
 	font-size: 1.2em;
 	margin-top: 0;
+	text-align: center; /* Center question text */
 }
 #question-area h3 {
 	color: #4CAF50;
 	margin-top: 0;
 	margin-bottom: 10px;
 	font-size: 1.2em;
+	text-align: center; /* Center horse name */
 }
-/* NEW: MCQ Choice Buttons */
+/* UPDATED: MCQ Choice Buttons */
 #mcq-choices {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 	margin: 10px 0;
 }
-/* NEW: MSQ Choice List */
-#msq-choices {
-	text-align: left;
-	padding-left: 20px;
-	font-size: 1.1em;
+/* --- NEW: MSQ/Rank/Sort/Match Choice List --- */
+#choice-list {
+	list-style-type: none;
+	padding: 0 10px;
+	margin: 15px 0;
 }
+#choice-list li {
+	font-size: 1.1em;
+	padding: 8px;
+	background: #555;
+	border-radius: 4px;
+	margin-bottom: 5px;
+}
+#choice-list li input[type="checkbox"] {
+	margin-right: 10px;
+	width: 18px;
+	height: 18px;
+	vertical-align: middle;
+}
+/* --- END NEW --- */
+
 .mcq-btn {
 	background-color: #007bff;
 	color: white;
@@ -165,6 +183,11 @@
 .mcq-btn:hover {
 	background-color: #0056b3;
 }
+/* NEW: Center-align buttons in question area */
+.question-buttons {
+	text-align: center;
+}
+
 #my-horse-name {
 	color: #4CAF50;
 	font-size: 1.4em;
@@ -178,12 +201,11 @@
 	font-weight: bold;
 	min-height: 1.2em;
 }
-/* NEW: Feedback Style */
 .feedback-correct {
-	color: #28a745; /* Green */
+	color: #28a745; 
 }
 .feedback-incorrect {
-	color: #dc3545; /* Red */
+	color: #dc3545; 
 }
 #timer {
 	color: #FF6347; 
@@ -330,7 +352,7 @@
 		let horseProgress = [];
 		let isHost = false; 
 		let myHorseName = ''; 
-		let myHorseLane = -1; // UPDATED: Store player's lane
+		let myHorseLane = -1; 
 		const raceLength = 800; 
 		const stepDistance = 35;
 		const winningDistance = 700; 
@@ -354,13 +376,11 @@
 			finishOrder.push([playerName, playerColor, laneIndex]);
 			let place = finishOrder.length;
 
-			// --- *** UPDATED: Confetti and Personal Messaging *** ---
 			if (laneIndex === myHorseLane) {
 				const placeSuffix = (place === 1) ? 'st' : (place === 2) ? 'nd' : (place === 3) ? 'rd' : 'th';
 				let message = `🎉 You finished ${place}${placeSuffix}! 🎉`;
 
 				if (place <= 3) {
-					// Launch confetti
 					confetti({
 						particleCount: 150,
 						spread: 100,
@@ -371,10 +391,8 @@
 					if (place === 3) message = `🥉 You finished 3rd! 🥉`;
 				}
 				
-				// Set personal finish message
 				document.getElementById('status-area').textContent = message;
 			}
-			// --- *** END OF UPDATE *** ---
 
 			document.querySelector('.medals').setAttribute('transform', `translate(${raceLength - 95} 0)`);
 			if (place === 1) {
@@ -543,7 +561,7 @@
 			horseProgress = [];
 			isHost = false; 
 			myHorseName = ''; 
-			myHorseLane = -1; // UPDATED
+			myHorseLane = -1; 
 
 			let playerAreaGroup = document.querySelector("#playerArea");
 			let gatesArea = document.querySelector("#gates");
@@ -592,9 +610,45 @@
 
 		// --- 3. Timer Management ---
 		let activeTimer = null; 
-		function stopActiveTimer() { /* ... (same as before) ... */ }
-		function startPenaltyTimer(duration, textPrefix) { /* ... (same as before) ... */ }
-		function startDangerZoneTimer(duration) { /* ... (same_as before) ... */ }
+		function stopActiveTimer() {
+			if (activeTimer) {
+				clearInterval(activeTimer);
+				activeTimer = null;
+			}
+		}
+		function startPenaltyTimer(duration, textPrefix) {
+			stopActiveTimer(); 
+			disableQButtons(); 
+			const endTime = Date.now() + duration;
+			const timerSpan = '<span id="timer"></span>s';
+			const timerElement = () => document.getElementById('timer'); 
+			activeTimer = setInterval(() => {
+				const remaining = Math.max(0, endTime - Date.now());
+				statusArea.innerHTML = textPrefix + timerSpan;
+				if (timerElement()) {
+					timerElement().textContent = (remaining / 1000).toFixed(1);
+				}
+				if (remaining === 0) stopActiveTimer();
+			}, 100);
+		}
+		function startDangerZoneTimer(duration) {
+			stopActiveTimer();
+			const endTime = Date.now() + duration;
+			const timerSpan = '<span id="timer"></span>s';
+			const timerElement = () => document.getElementById('timer');
+			activeTimer = setInterval(() => {
+				const remaining = Math.max(0, endTime - Date.now());
+				if (remaining === 0) {
+					stopActiveTimer();
+					statusArea.innerHTML = `<span class="safe-period">✅ Penalty-free period.</span>`;
+				} else {
+					statusArea.innerHTML = `Answer incorrectly in the next ${timerSpan} to be penalized.`;
+					if (timerElement()) {
+						timerElement().textContent = (remaining / 1000).toFixed(1);
+					}
+				}
+			}, 100);
+		}
 		function startRaceCountdown() {
 			stopActiveTimer();
 			let count = 5;
@@ -639,7 +693,9 @@
 			document.querySelectorAll('.q-btn').forEach(btn => btn.disabled = true);
 		}
 		function enableQButtons() {
-			if (!isHost) {
+			// Don't enable if you've finished
+			const myFinish = finishOrder.some(horse => horse[2] === myHorseLane);
+			if (!isHost && !myFinish) {
 				document.querySelectorAll('.q-btn').forEach(btn => btn.disabled = false);
 			}
 		}
@@ -654,20 +710,40 @@
 			});
 		});
 
-		// --- UPDATED: Split submit logic ---
+		// --- UPDATED: Submit logic ---
 		function submitAnswer(answer) {
 			stopActiveTimer(); 
 			questionArea.innerHTML = ''; 
 			statusArea.textContent = 'Submitting...';
 			socket.emit('submitAnswer', { answer: answer });
 		}
-		// NEW: Submit for MCQ buttons
+		
 		function submitChoice(choice) {
 			stopActiveTimer(); 
 			questionArea.innerHTML = ''; 
 			statusArea.textContent = 'Submitting...';
 			socket.emit('submitAnswer', { answer: choice });
 		}
+
+		// --- NEW: Submit for MSQ checkboxes ---
+		function submitMSQ() {
+			stopActiveTimer();
+			statusArea.textContent = 'Submitting...';
+			
+			// Find all checked boxes
+			const checkedInputs = document.querySelectorAll('#choice-list input:checked');
+			const selectedAnswers = [];
+			checkedInputs.forEach(input => {
+				selectedAnswers.push(input.value);
+			});
+			
+			// Sort and join them, just like the server does
+			const finalAnswer = selectedAnswers.sort().join(',');
+			
+			questionArea.innerHTML = ''; 
+			socket.emit('submitAnswer', { answer: finalAnswer });
+		}
+
 		function passQuestion() {
 			stopActiveTimer(); 
 			statusArea.textContent = 'Passing...';
@@ -687,7 +763,6 @@
 				console.log("I am the host!");
 				isHost = true;
 			} else if (data.allPlayers[data.myId]) {
-				// UPDATED: Store name and lane
 				myHorseName = data.allPlayers[data.myId].name;
 				myHorseLane = data.allPlayers[data.myId].lane;
 				myHorseNameEl.textContent = `Horse: ${myHorseName}`;
@@ -772,7 +847,7 @@
 			console.log(`I finished in ${data.place} place!`);
 			stopActiveTimer();
 			questionArea.innerHTML = '';
-			qControls.style.display = 'none'; // Hide Q buttons
+			qControls.style.display = 'none'; 
 		});
 
 		socket.on('gameStateChange', (newState, winnerName) => {
@@ -831,41 +906,51 @@
 			let questionHTML = `<h3>${myHorseName}</h3><p>${data.question}</p>`;
 
 			if (data.type === 'mcq' && data.choices) {
-				// Build buttons for MCQ
+				// --- Render MCQ ---
 				questionHTML += '<div id="mcq-choices">';
 				data.choices.forEach(choice => {
 					const cleanChoice = choice.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
 					questionHTML += `<button class="mcq-btn" onclick="submitChoice('${cleanChoice}')">${choice}</button>`;
 				});
 				questionHTML += '</div>';
+
 			} else if (data.type === 'msq' && data.choices) {
-				// --- NEW: Render MSQ ---
-				// 1. List the choices so the user knows what to type
-				questionHTML += '<ul id="msq-choices">';
-				data.choices.forEach(choice => {
-					questionHTML += `<li>${choice}</li>`;
+				// --- Render MSQ ---
+				questionHTML += '<ul id="choice-list">';
+				data.choices.forEach((choice, index) => {
+					const cleanChoice = choice.replace(/'/g, "&apos;").replace(/"/g, "&quot;");
+					questionHTML += `<li><label><input type="checkbox" name="msq-choice" value="${cleanChoice}"> ${choice}</label></li>`;
 				});
 				questionHTML += '</ul>';
-				// 2. Add the text input box
-				questionHTML += `
-					<input id="answer-input" placeholder="Type answers, e.g. A. Option 1, C. Option 3" onkeydown="if(event.key==='Enter') submitAnswer(this.value)">
-					<button onclick="submitAnswer(document.getElementById('answer-input').value)">Submit</button>
-				`;
+				questionHTML += `<div class="question-buttons"><button onclick="submitMSQ()">Submit Answer</button></div>`;
+
 			} else {
-				// Default to text input for 'text', 'rank', 'sort', 'match'
+				// --- Render TEXT, RANK, SORT, MATCH ---
 				let placeholder = "Your answer";
-				if (data.type === 'rank' || data.type === 'sort') placeholder = "e.g. C,A,B";
-				if (data.type === 'match') placeholder = "e.g. A-1,B-2";
-				if (data.type === 'msq') placeholder = "e.g. A. Option 1, C. Option 3"; // Fallback
+				
+				// Show item list for Rank, Sort, Match
+				if (data.choices && (data.type === 'rank' || data.type === 'sort' || data.type === 'match')) {
+					questionHTML += `<ul id="choice-list">`;
+					data.choices.forEach(choice => {
+						questionHTML += `<li>${choice}</li>`;
+					});
+					questionHTML += '</ul>';
+					
+					// Update placeholder text
+					if (data.type === 'rank' || data.type === 'sort') placeholder = "e.g. C,A,B";
+					if (data.type === 'match') placeholder = "e.g. A-1,B-2";
+				}
 				
 				questionHTML += `
-					<input id="answer-input" placeholder="${placeholder}" onkeydown="if(event.key==='Enter') submitAnswer(this.value)">
-					<button onclick="submitAnswer(document.getElementById('answer-input').value)">Submit</button>
+					<div class="question-buttons">
+						<input id="answer-input" placeholder="${placeholder}" onkeydown="if(event.key==='Enter') submitAnswer(this.value)">
+						<button onclick="submitAnswer(document.getElementById('answer-input').value)">Submit</button>
+					</div>
 				`;
 			}
 			
 			// Add the Pass button
-			questionHTML += `<button id="pass-btn" onclick="passQuestion()">Pass</button>`;
+			questionHTML += `<div class="question-buttons"><button id="pass-btn" onclick="passQuestion()">Pass</button></div>`;
 			
 			questionArea.innerHTML = questionHTML;
 
@@ -878,7 +963,6 @@
 			questionArea.innerHTML = ''; 
 			enableQButtons(); 
 			
-			// --- UPDATED: Show feedback ---
 			let feedbackMsg = data.feedback ? `<p>${data.feedback}</p>` : '';
 			
 			if (data.correct) {
@@ -897,6 +981,7 @@
 			statusArea.textContent = 'Your penalty is over. You may choose a question.';
 		});
 		
+		// --- *** UPDATED: PASS BUG FIX *** ---
 		socket.on('passUsed', (data) => {
 			stopActiveTimer();
 			
@@ -905,7 +990,7 @@
 				enableQButtons(); 
 				statusArea.textContent = `Pass used. ${data.passesRemaining} remaining.`;
 			} else {
-				// --- *** UPDATED: BUG FIX *** ---
+				// Player is out of passes, leave question on screen
 				statusArea.textContent = 'No passes remaining! You must answer.';
 				// Re-enable buttons in the question area so user is not stuck
 				questionArea.querySelectorAll('button').forEach(btn => btn.disabled = false);
