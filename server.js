@@ -28,10 +28,7 @@ let allQuestions = {
 
 // --- *** Google Sheets Integration *** ---
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
-
-// --- Hardcoded Spreadsheet ID ---
 const SPREADSHEET_ID = "1dxLNnJNRJQ5ZBkuySjHFP7zB_epOrD5He5YUt-AdUtA";
-
 let credentials;
 try {
 	const credentialsPath = '/etc/secrets/credentials.json';
@@ -52,69 +49,116 @@ async function getAuthClient() {
 	return auth;
 }
 
+
 /**
- * --- *** NEW UNIVERSAL PARSER (v3) *** ---
- * Handles your exact [TYPE:Question|...|ANSWER:Answer|Feedback] syntax
+ * --- *** NEW UNIVERSAL PARSER (V4) *** ---
+ * Handles your specified syntax for all 5 types.
  */
 function parseQuestionString(str) {
 	try {
-		// 1. Find the [type:...] part
 		const match = str.match(/\[(.*?):(.*?)\]/);
 		if (!match) return null;
 
-		let type = match[1].trim().toLowerCase();
-		let content = match[2];
-
-		// 2. Split the content by the |ANSWER:| and |Feedback]
-		// This is a robust way to separate the main parts
+		const type = match[1].trim().toLowerCase();
+		const content = match[2];
+		const parts = content.split('|').map(p => p.trim());
 		
-		let parts = content.split('|ANSWER:');
-		if (parts.length !== 2) return null; // Must have |ANSWER:
-		
-		const questionPartsStr = parts[0];
-		const answerPartsStr = parts[1];
+		if (parts.length < 2) return null; // [question|feedback] is minimum for text
 
-		let answerParts = answerPartsStr.split('|');
-		if (answerParts.length < 2) return null; // Must have Answer|Feedback
-		
-		const answer = answerParts[0].trim();
-		const feedback = answerParts[answerParts.length - 1].trim(); // Feedback is always last
+		const questionText = parts[0];
+		const feedback = parts[parts.length - 1];
+		const items = parts.slice(1, parts.length - 1); // All middle parts
 
-		// 3. Get Question and Choices
-		let questionParts = questionPartsStr.split('|');
-		const questionText = questionParts[0].trim();
-		
-		// 'choices' are all the parts between the question and the |ANSWER:
-		let choices = questionParts.slice(1).map(c => c.trim());
-
-		// 4. Finalize based on type
 		if (type === 'mcq') {
-			if (choices.length === 0) return null; // Must have choices
-			return {
-				q: questionText,
-				choices: choices,
-				a: answer, 
-				feedback: feedback,
-				type: type
-			};
+			let choices = [];
+			let correctAnswer = '';
+			items.forEach(item => {
+				if (item.endsWith('*')) {
+					correctAnswer = item.substring(0, item.length - 1);
+					choices.push(correctAnswer);
+				} else {
+					choices.push(item);
+				}
+			});
+			if (!correctAnswer) return null;
+			return { type, q: questionText, choices, a: correctAnswer, feedback };
+
 		} else if (type === 'msq') {
-			if (choices.length === 0) return null; // Must have choices
+			let choices = [];
+			let correctAnswers = [];
+			items.forEach(item => {
+				if (item.endsWith('*')) {
+					const clean = item.substring(0, item.length - 1);
+					correctAnswers.push(clean);
+					choices.push(clean);
+				} else {
+					choices.push(item);
+				}
+			});
+			if (correctAnswers.length === 0) return null;
+			return { type, q: questionText, choices, a: correctAnswers.sort().join(','), feedback };
+
+		} else if (type === 'text') {
+			if (items.length !== 1 || !items[0].endsWith('*')) return null;
+			return { type, q: questionText, choices: null, a: items[0].substring(0, items[0].length - 1), feedback };
+
+		} else if (type === 'rank') {
+			// [rank:Q|Item1|Item2|Item3|Feedback]
+			// Answer is "Item1,Item2,Item3"
 			return {
+				type,
 				q: questionText,
-				choices: choices,
-				a: answer.split(',').map(s => s.trim()).sort().join(','), // Sort answer for easy checking
-				feedback: feedback,
-				type: type
+				choices: items, // The items to be ranked
+				a: items.join(','), // The correct order is the written order
+				feedback
 			};
-		} else if (['text', 'rank', 'sort', 'match'].includes(type)) {
-			// For these types, 'choices' are the items to be sorted/matched/ranked
-			// If it's a 'text' question, choices will just be empty.
+		} else if (type === 'match') {
+			// [match:Q|Stem1|Target1|Stem2|Target2|Feedback]
+			if (items.length === 0 || items.length % 2 !== 0) return null; // Must be pairs
+			let stems = [];
+			let options = [];
+			let answerPairs = [];
+			for (let i = 0; i < items.length; i += 2) {
+				stems.push(items[i]);
+				options.push(items[i + 1]);
+				answerPairs.push(`${items[i]}-${items[i + 1]}`);
+			}
 			return {
+				type,
 				q: questionText,
-				choices: choices.length > 0 ? choices : null, 
-				a: answer,
-				feedback: feedback,
-				type: type
+				stems: stems, // The static list
+				choices: options, // The list to be dragged
+				a: answerPairs.sort().join(','), // "Stem1-Target1,Stem2-Target2"
+				feedback
+			};
+		} else if (type === 'sort') {
+			// [sort:Q|Bucket1|Bucket2|ItemA (1)|ItemB (2)|Feedback]
+			const itemRegex = /(.*?) \((\d+)\)$/;
+			let buckets = [];
+			let choices = [];
+			let answerPairs = [];
+
+			items.forEach(item => {
+				const match = item.match(itemRegex);
+				if (match) {
+					// It's an item, e.g., "Apple (1)"
+					const itemName = match[1].trim();
+					const bucketIndex = match[2];
+					choices.push(itemName);
+					answerPairs.push(`${itemName}-${bucketIndex}`);
+				} else {
+					// It's a bucket name, e.g., "Fruits"
+					buckets.push(item);
+				}
+			});
+			if (buckets.length === 0 || choices.length === 0) return null;
+			return {
+				type,
+				q: questionText,
+				buckets: buckets, // ["Fruits", "Vegetables"]
+				choices: choices, // ["Apple", "Carrot", "Banana"]
+				a: answerPairs.sort().join(','), // "Apple-1,Banana-1,Carrot-2"
+				feedback
 			};
 		}
 		
@@ -297,10 +341,13 @@ io.on('connection', (socket) => {
 		player.currentQuestion = question; 
 		player.questionStartTime = Date.now(); 
 		
+		// Send all new data
 		socket.emit('hereIsYourQuestion', {
+			type: question.type,
 			question: question.q,
-			choices: question.choices, 
-			type: question.type,     
+			choices: question.choices, // For mcq, msq, rank, sort
+			stems: question.stems,     // For match
+			buckets: question.buckets, // For sort
 			dangerZone: question.d.danger 
 		});
 	});
@@ -315,18 +362,17 @@ io.on('connection', (socket) => {
 		player.questionStartTime = 0;
 		if (!question) return; 
 
-		// --- UPDATED: Answer checking for MSQ ---
 		let submittedAnswer = (data.answer || "").toLowerCase().trim();
 		let correctAnswer = (question.a || "").toLowerCase().trim();
 		
-		// Special check for MSQ: sort answers to match
-		if (question.type === 'msq') {
+		// --- UPDATED: Sorting for MSQ, Match, Sort ---
+		if (question.type === 'msq' || question.type === 'sort' || question.type === 'match') {
 			submittedAnswer = submittedAnswer.split(',')
 											 .map(s => s.trim())
 											 .sort()
 											 .join(',');
 		}
-		// --- End MSQ Check ---
+		// --- End Check ---
 		
 		if (submittedAnswer === correctAnswer) {
 			// --- CORRECT ---
@@ -417,8 +463,6 @@ io.on('connection', (socket) => {
 			});
 		} else {
 			// --- FAILED PASS (Bug Fix) ---
-			// Do NOT change state. Do NOT clear question.
-			// Just tell them they are out of passes.
 			socket.emit('passUsed', { 
 				success: false,
 				passesRemaining: 0
