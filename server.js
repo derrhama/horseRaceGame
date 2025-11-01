@@ -28,16 +28,12 @@ let allQuestions = {
 
 // --- *** Google Sheets Integration *** ---
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
-
-// --- Hardcoded Spreadsheet ID ---
 const SPREADSHEET_ID = "1dxLNnJNRJQ5ZBkuySjHFP7zB_epOrD5He5YUt-AdUtA";
-
 let credentials;
 try {
 	const credentialsPath = '/etc/secrets/credentials.json';
 	const credentialsFile = fs.readFileSync(credentialsPath, 'utf8'); 
 	credentials = JSON.parse(credentialsFile);
-	
 } catch (e) {
 	console.error("CRITICAL ERROR: Could not read or parse /etc/secrets/credentials.json.", e.message);
 	process.exit(1);
@@ -54,8 +50,8 @@ async function getAuthClient() {
 }
 
 /**
- * --- *** UPDATED PARSER *** ---
- * Now correctly handles MCQ choices and recognizes other types.
+ * --- *** NEW UNIVERSAL PARSER *** ---
+ * Handles mcq, msq, text, rank, sort, and match
  */
 function parseQuestionString(str) {
 	try {
@@ -67,66 +63,74 @@ function parseQuestionString(str) {
 		}
 
 		const content = str.substring(startIndex + 1, endIndex);
+		const parts = content.split('|').map(p => p.trim()); // Trim whitespace
 		
-		const parts = content.split('|');
 		if (parts.length < 3) return null; // [type|question|feedback] is minimum
 
-		const type = parts[0].trim().toLowerCase(); // <-- Robustness fix
+		const type = parts[0].toLowerCase();
 		const questionText = parts[1];
 		const feedback = parts[parts.length - 1];
 		
-		if (type === 'mcq') {
-			if (parts.length < 4) return null; // Must have at least one choice
-			const choices = parts.slice(2, parts.length - 1);
-			let correctAnswer = '';
-			
-			// --- *** THE BUG FIX *** ---
-			// Map the choices to a new array, *removing* the asterisk
-			const processedChoices = choices.map(choice => {
-				if (choice.endsWith('*')) {
-					const cleanChoice = choice.substring(0, choice.length - 1);
-					correctAnswer = cleanChoice; // Store the clean answer
-					return cleanChoice; // Return the clean choice
-				}
-				return choice; // Return the normal choice
-			});
-			// --- *** END OF BUG FIX *** ---
+		// Get all parts between question and feedback
+		const allOptions = parts.slice(2, parts.length - 1);
+		
+		let correctAnswers = [];
+		let choices = [];
 
-			if (correctAnswer) {
-				return {
-					q: questionText,
-					choices: processedChoices, // Send the clean choices
-					a: correctAnswer, // Send the clean answer
-					feedback: feedback,
-					type: type
-				};
+		allOptions.forEach(option => {
+			if (option.endsWith('*')) {
+				const cleanAnswer = option.substring(0, option.length - 1);
+				correctAnswers.push(cleanAnswer);
+				// For mcq/msq, add the clean version to choices
+				if (type === 'mcq' || type === 'msq') {
+					choices.push(cleanAnswer);
+				}
+			} else {
+				// If not an answer, it's just a choice (for mcq/msq)
+				if (type === 'mcq' || type === 'msq') {
+					choices.push(option);
+				}
 			}
-		} else if (['msq', 'rank', 'sort', 'match', 'text'].includes(type)) {
-			// --- NEW: Handle other types ---
-			// For now, they all expect a text answer.
-			// We assume the answer is the 2nd-to-last part.
-			if (parts.length < 4) return null; // [type|question|answer*|feedback]
-			let answer = parts[parts.length - 2];
-			if (answer.endsWith('*')) {
-				answer = answer.substring(0, answer.length - 1);
-			}
-			
+		});
+
+		// Final processing
+		if (type === 'mcq') {
+			if (correctAnswers.length !== 1) return null; // MCQ must have exactly one answer
 			return {
 				q: questionText,
-				choices: null, // No choices, will render a text box
-				a: answer,
+				choices: choices,
+				a: correctAnswers[0], // Single answer
+				feedback: feedback,
+				type: type
+			};
+		} else if (type === 'msq') {
+			if (correctAnswers.length === 0) return null; // MSQ must have at least one answer
+			return {
+				q: questionText,
+				choices: choices,
+				a: correctAnswers.sort().join(','), // Comma-separated, sorted
+				feedback: feedback,
+				type: type
+			};
+		} else if (['text', 'rank', 'sort', 'match'].includes(type)) {
+			if (correctAnswers.length !== 1) return null; // These types must have one answer
+			return {
+				q: questionText,
+				choices: null, // Will render as text box
+				a: correctAnswers[0],
 				feedback: feedback,
 				type: type
 			};
 		}
 		
-		return null; 
+		return null; // Unknown type
 
 	} catch (e) {
 		console.error("Error parsing question string:", str, e);
 		return null;
 	}
 }
+// --- *** END OF NEW PARSER *** ---
 
 
 /**
@@ -317,8 +321,18 @@ io.on('connection', (socket) => {
 		player.questionStartTime = 0;
 		if (!question) return; 
 
+		// --- UPDATED: Answer checking for MSQ ---
 		let submittedAnswer = (data.answer || "").toLowerCase().trim();
 		let correctAnswer = (question.a || "").toLowerCase().trim();
+		
+		// Special check for MSQ: sort answers to match
+		if (question.type === 'msq') {
+			submittedAnswer = submittedAnswer.split(',')
+											 .map(s => s.trim())
+											 .sort()
+											 .join(',');
+		}
+		// --- End MSQ Check ---
 		
 		if (submittedAnswer === correctAnswer) {
 			// --- CORRECT ---
