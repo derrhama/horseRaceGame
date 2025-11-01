@@ -51,8 +51,8 @@ async function getAuthClient() {
 
 
 /**
- * --- *** NEW UNIVERSAL PARSER (V5) *** ---
- * This version correctly parses [type:...] AND [type|...]
+ * --- *** NEW UNIVERSAL PARSER (V5 - THE REAL FIX) *** ---
+ * Handles both [type:...] and [type|...]
  */
 function parseQuestionString(str) {
 	try {
@@ -75,7 +75,10 @@ function parseQuestionString(str) {
 		
 		// 4. Parse the remaining parts
 		const parts = questionAndOptions.split('|').map(p => p.trim());
-		if (parts.length < 2) return null; // [question|feedback] is minimum
+		
+		// This handles a format like [mcq|Question|...]
+		// where the question is the first part
+		if (parts.length < 2) return null; // [question|feedback] is minimum for text
 
 		const questionText = parts[0];
 		const feedback = parts[parts.length - 1];
@@ -92,7 +95,7 @@ function parseQuestionString(str) {
 					choices.push(item);
 				}
 			});
-			if (!correctAnswer) return null;
+			if (!correctAnswer || choices.length === 0) return null;
 			return { type, q: questionText, choices, a: correctAnswer, feedback };
 
 		} else if (type === 'msq') {
@@ -107,7 +110,7 @@ function parseQuestionString(str) {
 					choices.push(item);
 				}
 			});
-			if (correctAnswers.length === 0) return null;
+			if (correctAnswers.length === 0 || choices.length === 0) return null;
 			return { type, q: questionText, choices, a: correctAnswers.sort().join(','), feedback };
 
 		} else if (type === 'text') {
@@ -116,7 +119,6 @@ function parseQuestionString(str) {
 
 		} else if (type === 'rank') {
 			// [rank:Q|Item1|Item2|Item3|Feedback]
-			// Answer is "Item1,Item2,Item3"
 			return {
 				type,
 				q: questionText,
