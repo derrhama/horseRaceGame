@@ -51,19 +51,31 @@ async function getAuthClient() {
 
 
 /**
- * --- *** NEW UNIVERSAL PARSER (V4) *** ---
- * Handles your specified syntax for all 5 types.
+ * --- *** NEW UNIVERSAL PARSER (V5) *** ---
+ * This version correctly parses [type:...] AND [type|...]
  */
 function parseQuestionString(str) {
 	try {
-		const match = str.match(/\[(.*?):(.*?)\]/);
+		// 1. Find the [type...] part, stop at the first ]
+		const match = str.match(/\[(.*?)\]/);
 		if (!match) return null;
 
-		const type = match[1].trim().toLowerCase();
-		const content = match[2];
-		const parts = content.split('|').map(p => p.trim());
+		const content = match[1];
 		
-		if (parts.length < 2) return null; // [question|feedback] is minimum for text
+		// 2. Find the *first* separator (':' or '|')
+		let separatorIndex = content.indexOf(':');
+		if (separatorIndex === -1) {
+			separatorIndex = content.indexOf('|');
+		}
+		if (separatorIndex === -1) return null; // No separator found
+		
+		// 3. Extract type and the rest of the content
+		const type = content.substring(0, separatorIndex).trim().toLowerCase();
+		const questionAndOptions = content.substring(separatorIndex + 1);
+		
+		// 4. Parse the remaining parts
+		const parts = questionAndOptions.split('|').map(p => p.trim());
+		if (parts.length < 2) return null; // [question|feedback] is minimum
 
 		const questionText = parts[0];
 		const feedback = parts[parts.length - 1];
